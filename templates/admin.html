@@ -15,7 +15,7 @@
   --glow-g:0 0 14px rgba(0,255,136,0.4);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:14px}
+html{font-size:16px}
 body{background:var(--dark);color:#c8e8ff;font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;cursor:none}
 
 /* ── CURSOR ── */
@@ -33,6 +33,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
 .lb::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--c),transparent)}
 .lb-ring{width:56px;height:56px;border:1px solid rgba(0,245,255,.15);border-top:2px solid var(--c);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 22px;box-shadow:var(--glow)}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes levitate{0%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 10px rgba(0,245,255,0.4))}50%{transform:translateY(-8px) scale(1.05);filter:drop-shadow(0 0 25px rgba(0,245,255,0.8))}100%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 10px rgba(0,245,255,0.4))}}
 .lb-logo{font-family:'Orbitron',monospace;font-size:1.5rem;font-weight:900;color:var(--c);text-shadow:var(--glow);letter-spacing:.3em;text-align:center;margin-bottom:4px}
 .lb-sub{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:rgba(0,245,255,.35);text-align:center;letter-spacing:.2em;margin-bottom:30px}
 .lf{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
@@ -231,7 +232,34 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
 <!-- LOGIN -->
 <div id="login">
   <div class="lb">
-    <div class="lb-ring"></div>
+    <div style="display:flex;justify-content:center;margin-bottom:15px;">
+      <svg viewBox="0 0 100 100" style="width:56px;height:56px;animation:levitate 3s ease-in-out infinite;">
+        <g fill="none" stroke="var(--c)" stroke-width="4" stroke-linejoin="round">
+          <polygon points="25,4 30,22 23,22" />
+          <polygon points="75,4 70,22 77,22" />
+          <rect x="20" y="22" width="60" height="6" />
+          <polygon points="45,10 55,10 58,18 55,22 45,22 42,18" />
+          <polygon points="30,28 70,28 70,35 55,50 45,50 30,35" />
+          <polyline points="33,30 46,30 50,35 46,40" />
+          <polyline points="67,30 54,30 50,35 54,40" />
+          <rect x="22" y="28" width="8" height="15" />
+          <rect x="70" y="28" width="8" height="15" />
+          <rect x="15" y="30" width="7" height="15" rx="2" />
+          <rect x="78" y="30" width="7" height="15" rx="2" />
+          <polygon points="22,43 30,43 32,60 20,60" />
+          <polygon points="70,43 78,43 80,60 68,60" />
+          <rect x="22" y="60" width="8" height="6" rx="1" />
+          <rect x="70" y="60" width="8" height="6" rx="1" />
+          <polygon points="45,50 55,50 53,55 47,55" />
+          <polygon points="35,46 43,46 43,73 32,73" />
+          <polygon points="57,46 65,46 68,73 57,73" />
+          <rect x="35" y="73" width="8" height="20" rx="2" />
+          <rect x="31" y="76" width="4" height="14" rx="1" />
+          <rect x="57" y="73" width="8" height="20" rx="2" />
+          <rect x="65" y="76" width="4" height="14" rx="1" />
+        </g>
+      </svg>
+    </div>
     <div class="lb-logo">TOXIBH</div>
     <div class="lb-sub">ADMIN CONTROL CENTER · AUTHORIZED ONLY</div>
     <div class="lf"><label class="ll">ADMIN ID</label><input class="li" id="l-u" type="text" placeholder="Admin ID..." autocomplete="off"></div>
@@ -246,7 +274,34 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
   <!-- SIDEBAR -->
   <nav id="sb">
     <div class="sb-top">
-      <div class="sb-logo">TOXIBH</div>
+      <div class="sb-logo" style="display:flex;align-items:center;">
+        <svg viewBox="0 0 100 100" style="width:34px;height:34px;animation:levitate 3s ease-in-out infinite;">
+          <g fill="none" stroke="var(--c)" stroke-width="4" stroke-linejoin="round">
+            <polygon points="25,4 30,22 23,22" />
+            <polygon points="75,4 70,22 77,22" />
+            <rect x="20" y="22" width="60" height="6" />
+            <polygon points="45,10 55,10 58,18 55,22 45,22 42,18" />
+            <polygon points="30,28 70,28 70,35 55,50 45,50 30,35" />
+            <polyline points="33,30 46,30 50,35 46,40" />
+            <polyline points="67,30 54,30 50,35 54,40" />
+            <rect x="22" y="28" width="8" height="15" />
+            <rect x="70" y="28" width="8" height="15" />
+            <rect x="15" y="30" width="7" height="15" rx="2" />
+            <rect x="78" y="30" width="7" height="15" rx="2" />
+            <polygon points="22,43 30,43 32,60 20,60" />
+            <polygon points="70,43 78,43 80,60 68,60" />
+            <rect x="22" y="60" width="8" height="6" rx="1" />
+            <rect x="70" y="60" width="8" height="6" rx="1" />
+            <polygon points="45,50 55,50 53,55 47,55" />
+            <polygon points="35,46 43,46 43,73 32,73" />
+            <polygon points="57,46 65,46 68,73 57,73" />
+            <rect x="35" y="73" width="8" height="20" rx="2" />
+            <rect x="31" y="76" width="4" height="14" rx="1" />
+            <rect x="57" y="73" width="8" height="20" rx="2" />
+            <rect x="65" y="76" width="4" height="14" rx="1" />
+          </g>
+        </svg>
+      </div>
       <div class="sb-ver">ADMIN CONTROL CENTER</div>
     </div>
     <div class="sb-nav">
@@ -284,6 +339,79 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
         <div class="sc"><div class="sc-ico">🔐</div><div class="sc-v" id="spw">—</div><div class="sc-l">PASSWORDS</div></div>
         <div class="sc"><div class="sc-ico">🗂️</div><div class="sc-v" id="sf">—</div><div class="sc-l">FILES</div></div>
       </div>
+      
+      <!-- ── SERVER MONITORING DASHBOARD ── -->
+      <div class="pnl">
+        <div class="pnl-h"><span class="pnl-hl">🖥️ REAL-TIME SYSTEM MONITORING</span></div>
+        <div class="pnl-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
+          
+          <div style="background:rgba(0,245,255,.03);border:1px solid rgba(0,245,255,.1);padding:14px;border-left:3px solid var(--c)">
+            <div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--c);margin-bottom:10px;letter-spacing:0.1em">SYSTEM RESOURCES</div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">CPU USAGE</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-cpu">0.0%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">RAM USAGE</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-ram">0.0%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">DISK USAGE</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-disk">0.0%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">UPTIME</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-up">0h 0m</span>
+            </div>
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">PROCESSES</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-proc">0</span>
+            </div>
+          </div>
+          
+          <div style="background:rgba(0,255,136,.03);border:1px solid rgba(0,255,136,.1);padding:14px;border-left:3px solid var(--g)">
+            <div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--g);margin-bottom:10px;letter-spacing:0.1em">SERVER HEALTH & TRAFFIC</div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">TOTAL REQUESTS</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-req">0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">REQUEST RATE</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-rate">0/min</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">ERROR COUNT</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-err">0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">AVG RESPONSE</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="met-resp">0.00 ms</span>
+            </div>
+          </div>
+          
+          <div style="background:rgba(255,0,110,.03);border:1px solid rgba(255,0,110,.1);padding:14px;border-left:3px solid var(--m)">
+            <div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--m);margin-bottom:10px;letter-spacing:0.1em">APPLICATION ACTIVITY</div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">TOTAL VISITORS</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="app-vis">0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">ACTIVE USERS (TODAY)</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="app-act">0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">CHATBOT SESSIONS</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="app-chat">0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(200,232,255,.6)">CONTACT MESSAGES</span>
+              <span style="font-family:'Orbitron',monospace;font-size:.8rem;color:#fff" id="app-msg">0</span>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      
       <div class="pnl">
         <div class="pnl-h"><span class="pnl-hl">📈 VISITOR ACTIVITY — LAST 7 DAYS</span></div>
         <div class="pnl-b"><div class="chart" id="d-chart"></div></div>
@@ -461,6 +589,47 @@ async function loadDash(){
   // Recent visitors
   const vis=await api('GET','/api/visitors?limit=5');
   document.getElementById('d-vis').innerHTML=(vis.data||[]).map((v,i)=>`<div class="vr"><div class="vn">${i+1}</div><div class="vm"><div class="vip">${v.ip}</div><div class="vua">${(v.user_agent||'').substring(0,50)}...</div></div><div class="vt">${ft(v.time)}</div></div>`).join('')||empty('NO VISITORS YET');
+
+  // Trigger metrics polling
+  pollMetrics();
+}
+
+// ── METRICS POLLING ──
+let metricsTimer = null;
+async function pollMetrics() {
+  if (metricsTimer) clearTimeout(metricsTimer);
+  
+  // Only poll if dashboard is visible
+  if (document.getElementById('pg-dash').classList.contains('on')) {
+    try {
+      const sys = await api('GET', '/api/metrics/system');
+      if (sys.cpu !== undefined) {
+        document.getElementById('met-cpu').textContent = sys.cpu.toFixed(1) + '%';
+        document.getElementById('met-ram').textContent = sys.ram.toFixed(1) + '%';
+        document.getElementById('met-disk').textContent = sys.disk.toFixed(1) + '%';
+        document.getElementById('met-up').textContent = sys.uptime;
+        document.getElementById('met-proc').textContent = sys.processes;
+      }
+      
+      const srv = await api('GET', '/api/metrics/server');
+      if (srv.total_requests !== undefined) {
+        document.getElementById('met-req').textContent = srv.total_requests;
+        document.getElementById('met-rate').textContent = srv.request_rate;
+        document.getElementById('met-err').textContent = srv.error_count;
+        document.getElementById('met-resp').textContent = srv.avg_response_time;
+      }
+      
+      const appMetrics = await api('GET', '/api/metrics/application');
+      if (appMetrics.total_visitors !== undefined) {
+        document.getElementById('app-vis').textContent = appMetrics.total_visitors;
+        document.getElementById('app-act').textContent = appMetrics.active_users;
+        document.getElementById('app-chat').textContent = appMetrics.chatbot_conversations;
+        document.getElementById('app-msg').textContent = appMetrics.contact_messages;
+      }
+    } catch (e) { console.error('Metrics fetch error:', e); }
+  }
+  
+  metricsTimer = setTimeout(pollMetrics, 5000); // 5 sec interval
 }
 
 // ── VISITORS ──

@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SUBHAM JENA</title>
+<title>Subham Jena</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='none' stroke='%2300f5ff' stroke-width='4' stroke-linejoin='round'%3E%3Cpolygon points='25,4 30,22 23,22' /%3E%3Cpolygon points='75,4 70,22 77,22' /%3E%3Crect x='20' y='22' width='60' height='6' /%3E%3Cpolygon points='45,10 55,10 58,18 55,22 45,22 42,18' /%3E%3Cpolygon points='30,28 70,28 70,35 55,50 45,50 30,35' /%3E%3Cpolyline points='33,30 46,30 50,35 46,40' /%3E%3Cpolyline points='67,30 54,30 50,35 54,40' /%3E%3Crect x='22' y='28' width='8' height='15' /%3E%3Crect x='70' y='28' width='8' height='15' /%3E%3Crect x='15' y='30' width='7' height='15' rx='2' /%3E%3Crect x='78' y='30' width='7' height='15' rx='2' /%3E%3Cpolygon points='22,43 30,43 32,60 20,60' /%3E%3Cpolygon points='70,43 78,43 80,60 68,60' /%3E%3Crect x='22' y='60' width='8' height='6' rx='1' /%3E%3Crect x='70' y='60' width='8' height='6' rx='1' /%3E%3Cpolygon points='45,50 55,50 53,55 47,55' /%3E%3Cpolygon points='35,46 43,46 43,73 32,73' /%3E%3Cpolygon points='57,46 65,46 68,73 57,73' /%3E%3Crect x='35' y='73' width='8' height='20' rx='2' /%3E%3Crect x='31' y='76' width='4' height='14' rx='1' /%3E%3Crect x='57' y='73' width='8' height='20' rx='2' /%3E%3Crect x='65' y='76' width='4' height='14' rx='1' /%3E%3C/g%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -34,8 +35,8 @@
 
   /* NAV */
   nav{position:fixed;top:0;width:100%;z-index:1000;padding:18px 60px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(2,4,8,.97),transparent);border-bottom:1px solid rgba(0,245,255,.1);}
-  .nav-logo{font-family:'Orbitron',monospace;font-size:1.3rem;font-weight:900;color:var(--cyan);letter-spacing:.3em;text-shadow:var(--glow);animation:logoFlicker 7s ease-in-out infinite;}
-  @keyframes logoFlicker{0%,97%,100%{opacity:1}98%{opacity:.6}}
+  .nav-logo{font-family:'Orbitron',monospace;font-size:1.4rem;font-weight:900;color:var(--cyan);letter-spacing:.3em;text-shadow:var(--glow);animation:neonFlicker 1.5s infinite alternate;}
+  @keyframes neonFlicker{0%,19%,21%,23%,25%,54%,56%,100%{text-shadow:var(--glow), 0 0 10px var(--cyan), 0 0 20px var(--cyan); opacity:1;}20%,24%,55%{text-shadow:none; opacity:0.1;}}
   .nav-links{display:flex;gap:36px;}
   .nav-links a{font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:.15em;color:rgba(224,247,255,.6);text-decoration:none;text-transform:uppercase;position:relative;transition:color .3s;}
   .nav-links a::after{content:'';position:absolute;bottom:-4px;left:0;width:0;height:1px;background:var(--cyan);transition:width .3s;}
@@ -129,7 +130,6 @@
   .project-link:hover{color:#fff;border-color:#fff;}
 
   /* CERTIFICATIONS */
-  #certifications{}
   .certs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;}
   .cert-card{padding:28px;border:1px solid rgba(0,255,136,.15);background:rgba(0,20,10,.4);position:relative;overflow:hidden;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%);transition:all .4s;}
   .cert-card:hover{border-color:var(--green);box-shadow:var(--glow-g);transform:translateY(-3px);}
@@ -159,10 +159,82 @@
   .achievement-title{font-family:'Orbitron',monospace;font-size:.78rem;font-weight:700;color:var(--gold);margin-bottom:8px;line-height:1.3;}
   .achievement-desc{font-size:.85rem;color:rgba(224,247,255,.6);line-height:1.5;}
 
+  /* GAMES SECTION */
+  #games{background:linear-gradient(180deg,transparent,rgba(0,10,30,.6),transparent);}
+  .games-container{display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+  .game-wrapper{position:relative;border:1px solid rgba(0,245,255,.2);background:#010408;padding:2px;border-radius:2px;box-shadow:var(--glow);overflow:hidden;}
+  .game-wrapper.rocket{border-color:rgba(255,0,110,.4);box-shadow:var(--glow-m);}
+  .game-header{display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(0,40,60,.4);border-bottom:1px solid rgba(0,245,255,.3);}
+  .game-wrapper.rocket .game-header{background:rgba(60,0,20,.4);border-color:rgba(255,0,110,.3);}
+  .game-title{font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:700;color:var(--cyan);text-shadow:var(--glow);letter-spacing:.2em;}
+  .game-wrapper.rocket .game-title{color:var(--magenta);text-shadow:var(--glow-m);}
+  .game-canvas-area{position:relative;width:100%;aspect-ratio:4/3;background:#000;overflow:hidden;cursor:crosshair;}
+  .game-score-display{font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:900;color:#fff;text-shadow:var(--glow);display:none;}
+  .game-wrapper.rocket .game-score-display{text-shadow:var(--glow-m);}
+  .fs-mode .game-score-display{font-size:1.5rem;}
+  .fs-mode .game-title{font-size:1.5rem;}
+  .game-canvas{display:block;width:100%;height:100%;}
+  .game-overlay{position:absolute;inset:0;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;}
+  .game-overlay.hidden{display:none;}
+  .game-over-title{font-family:'Orbitron',monospace;font-size:2.5rem;font-weight:900;color:var(--magenta);margin-bottom:10px;text-shadow:var(--glow-m);text-transform:uppercase;}
+  .game-over-score{font-family:'Share Tech Mono',monospace;font-size:1.5rem;color:#fff;margin-bottom:25px;letter-spacing:2px;display:none;text-shadow:var(--glow);}
+  .go-btn-row{display:flex;gap:15px;}
+  .game-btn{padding:12px 30px;font-family:'Orbitron',monospace;font-size:.8rem;font-weight:700;color:#000;background:var(--cyan);border:none;cursor:pointer;clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);transition:all .3s;}
+  .game-btn:hover{background:#fff;box-shadow:var(--glow);}
+  .game-wrapper.rocket .game-btn{background:var(--magenta);color:#fff;}
+  .game-wrapper.rocket .game-btn:hover{background:#fff;color:#000;box-shadow:var(--glow-m);}
+  .mobile-controls{display:none;padding:10px;gap:10px;justify-content:center;background:#050a10;}
+  .m-btn{width:50px;height:50px;border:1px solid rgba(0,245,255,.3);background:rgba(0,245,255,.1);color:var(--cyan);display:flex;align-items:center;justify-content:center;font-size:1.5rem;user-select:none;touch-action:manipulation;border-radius:4px;}
+  .m-btn:active{background:rgba(0,245,255,.3);}
+  .game-wrapper.rocket .m-btn{border-color:rgba(255,0,110,.3);background:rgba(255,0,110,.1);color:var(--magenta);}
+  .game-wrapper.rocket .m-btn:active{background:rgba(255,0,110,.3);}
+  .leaderboard{margin-top:20px;background:rgba(0,10,20,.6);border:1px solid rgba(0,245,255,.1);padding:16px;}
+  .game-wrapper.rocket .leaderboard{border-color:rgba(255,0,110,.1);}
+  .lb-title{font-family:'Orbitron',monospace;font-size:.8rem;color:var(--cyan);margin-bottom:12px;text-align:center;letter-spacing:2px;}
+  .game-wrapper.rocket .lb-title{color:var(--magenta);}
+  .lb-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:'Share Tech Mono',monospace;font-size:.7rem;}
+  .lb-rank{width:20px;color:rgba(255,255,255,.4);}
+  .lb-name{flex:1;color:rgba(255,255,255,.8);}
+  .lb-score{color:var(--gold);font-weight:bold;}
+  
+  /* GAME PLAYER MODAL */
+  #playerModal{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
+  #playerModal.show{display:flex;}
+  .pm-box{background:rgba(5,15,25,.95);border:1px solid var(--cyan);padding:40px;width:90%;max-width:400px;clip-path:polygon(0 0,calc(100% - 20px) 0,100% 20px,100% 100%,20px 100%,0 calc(100% - 20px));box-shadow:var(--glow),0 20px 50px rgba(0,0,0,.9);text-align:center;position:relative;}
+  .pm-title{font-family:'Orbitron',monospace;font-size:1.5rem;color:var(--cyan);margin-bottom:10px;text-shadow:var(--glow);}
+  .pm-desc{font-family:'Share Tech Mono',monospace;font-size:.8rem;color:rgba(200,232,255,.6);margin-bottom:24px;}
+  .pm-input{width:100%;background:rgba(0,245,255,.05);border:1px solid rgba(0,245,255,.3);color:#fff;font-family:'Orbitron',monospace;font-size:1.2rem;padding:12px;text-align:center;outline:none;margin-bottom:24px;transition:border-color .3s;}
+  .pm-input:focus{border-color:var(--cyan);box-shadow:var(--glow);}
+  .pm-close{position:absolute;top:10px;right:15px;color:rgba(255,255,255,.4);font-size:1.5rem;cursor:pointer;border:none;background:none;}
+  .pm-close:hover{color:var(--magenta);}
+
+  /* FULLSCREEN IMMERSIVE MODE */
+  .fs-mode{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:999999!important;background:#000!important;display:flex;flex-direction:column;}
+  .fs-mode .game-canvas-area{flex:1;aspect-ratio:auto;}
+  .fs-mode .leaderboard{display:none;}
+  .fs-mode .m-btn{width:70px;height:70px;font-size:2rem;}
+  
+  .btn-exit-fs{display:none;position:absolute;top:20px;right:20px;padding:10px 20px;font-family:'Orbitron',monospace;font-size:.8rem;font-weight:700;color:#fff;background:rgba(255,0,110,.2);border:1px solid var(--magenta);cursor:pointer;z-index:1000000;box-shadow:var(--glow-m);backdrop-filter:blur(4px);transition:all .3s;}
+  .btn-exit-fs:hover{background:var(--magenta);color:#000;}
+  .fs-mode .btn-exit-fs{display:block;}
+  
+  .game-intro-overlay{position:absolute;inset:0;background:rgba(0,5,10,.95);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-family:'Orbitron',monospace;}
+  .intro-text-1{font-size:1.2rem;color:var(--cyan);margin-bottom:10px;animation:glitch .2s infinite;}
+  .intro-text-2{font-size:2.5rem;font-weight:900;color:#fff;margin-bottom:30px;text-shadow:var(--glow);}
+  .intro-bar-bg{width:300px;height:4px;background:rgba(255,255,255,.1);position:relative;overflow:hidden;}
+  .intro-bar-fg{position:absolute;top:0;left:0;height:100%;background:var(--cyan);width:0%;box-shadow:var(--glow);}
+  
+  @keyframes shake{0%{transform:translate(1px,1px) rotate(0deg)}10%{transform:translate(-1px,-2px) rotate(-1deg)}20%{transform:translate(-3px,0px) rotate(1deg)}30%{transform:translate(3px,2px) rotate(0deg)}40%{transform:translate(1px,-1px) rotate(1deg)}50%{transform:translate(-1px,2px) rotate(-1deg)}60%{transform:translate(-3px,1px) rotate(0deg)}70%{transform:translate(3px,1px) rotate(-1deg)}80%{transform:translate(-1px,-1px) rotate(1deg)}90%{transform:translate(1px,2px) rotate(0deg)}100%{transform:translate(1px,-2px) rotate(-1deg)}}
+  .shake{animation:shake .4s cubic-bezier(.36,.07,.19,.97) both;}
+
   /* CONTACT */
   .contact-wrap{text-align:center;max-width:700px;margin:0 auto;}
   .contact-wrap p{font-size:1.05rem;color:rgba(224,247,255,.7);line-height:1.8;margin-bottom:40px;}
-  .contact-methods{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:40px;}
+  .contact-form{display:flex;flex-direction:column;align-items:center;gap:20px;margin:0 auto 40px;max-width:500px;background:rgba(0,20,40,.4);padding:40px;border:1px solid rgba(0,245,255,.15);clip-path:polygon(0 0,calc(100% - 20px) 0,100% 20px,100% 100%,20px 100%,0 calc(100% - 20px));}
+  .contact-form input, .contact-form textarea{width:100%;background:rgba(0,10,20,.6);border:1px solid rgba(0,245,255,.2);color:#fff;font-family:'Rajdhani',sans-serif;font-size:1rem;padding:12px 16px;outline:none;transition:border-color .3s;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .contact-form input:focus, .contact-form textarea:focus{border-color:var(--cyan);box-shadow:0 0 10px rgba(0,245,255,.2);}
+  .contact-form textarea{resize:vertical;min-height:100px;}
+  .contact-methods{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;}
   .contact-method{display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;border:1px solid rgba(0,245,255,.15);background:rgba(0,10,20,.5);text-decoration:none;transition:all .3s;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));}
   .contact-method:hover{border-color:var(--cyan);box-shadow:var(--glow);transform:translateY(-3px);}
   .contact-method-icon{font-size:1.5rem;}
@@ -172,10 +244,9 @@
   footer{text-align:center;padding:40px;border-top:1px solid rgba(0,245,255,.1);font-family:'Share Tech Mono',monospace;font-size:.7rem;color:rgba(224,247,255,.3);letter-spacing:.2em;position:relative;z-index:2;}
 
   /* AI ASSISTANT */
-  #ai-assistant{position:fixed;bottom:30px;right:30px;z-index:9000;}
-  #ai-toggle{width:64px;height:64px;background:linear-gradient(135deg,var(--dark2),#040a18);border:1px solid var(--cyan);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--glow),0 0 0 0 rgba(0,245,255,.4);animation:aiPulse 3s ease-in-out infinite;transition:transform .3s;}
-  @keyframes aiPulse{0%,100%{box-shadow:var(--glow),0 0 0 0 rgba(0,245,255,.4)}50%{box-shadow:var(--glow),0 0 0 20px rgba(0,245,255,0)}}
-  #ai-toggle:hover{transform:scale(1.1);}
+  #ai-assistant{position:fixed;bottom:20px;right:20px;z-index:9000;}
+  #ai-toggle{background:rgba(2,13,28,.95);border:1px solid rgba(0,245,255,.2);color:var(--cyan);width:60px;height:60px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--glow);transition:all .3s;}
+  #ai-toggle:hover{transform:scale(1.1);border-color:var(--cyan);background:rgba(0,245,255,.05);}
   #ai-panel{position:absolute;bottom:80px;right:0;width:390px;background:rgba(2,4,8,.97);border:1px solid rgba(0,245,255,.3);backdrop-filter:blur(20px);clip-path:polygon(0 0,calc(100% - 20px) 0,100% 20px,100% 100%,20px 100%,0 calc(100% - 20px));transform:scale(.9) translateY(10px);transform-origin:bottom right;opacity:0;pointer-events:none;transition:all .3s cubic-bezier(.34,1.56,.64,1);box-shadow:0 40px 100px rgba(0,0,0,.8),var(--glow);}
   #ai-panel.open{opacity:1;pointer-events:all;transform:scale(1) translateY(0);}
   .ai-header{padding:20px 24px 16px;border-bottom:1px solid rgba(0,245,255,.1);display:flex;align-items:center;gap:14px;}
@@ -223,15 +294,21 @@
   .reveal-delay-3{transition-delay:.45s;}
 
   /* LOADER */
-  #loader{position:fixed;inset:0;z-index:99999;background:var(--dark);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .6s,visibility .6s;}
+  #loader{position:fixed;inset:0;z-index:99999;background:var(--dark);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;transition:opacity .6s,visibility .6s;}
   #loader.done{opacity:0;visibility:hidden;}
-  .loader-logo{font-family:'Orbitron',monospace;font-size:2rem;font-weight:900;color:var(--cyan);letter-spacing:.3em;text-shadow:var(--glow);}
-  .loader-bar-wrap{width:300px;height:2px;background:rgba(0,245,255,.1);}
-  .loader-bar{height:100%;background:linear-gradient(90deg,var(--cyan),var(--magenta));animation:load 2s ease forwards;}
-  @keyframes load{from{width:0}to{width:100%}}
-  .loader-text{font-family:'Share Tech Mono',monospace;font-size:.7rem;letter-spacing:.3em;color:rgba(0,245,255,.5);}
-  .loader-sub{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.2em;color:rgba(255,0,110,.5);}
+  .loader-robot-svg{width:120px;height:120px;filter:drop-shadow(var(--glow));}
+  @keyframes levitate{0%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 10px rgba(0,245,255,0.4))}50%{transform:translateY(-8px) scale(1.05);filter:drop-shadow(0 0 25px rgba(0,245,255,0.8))}100%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 10px rgba(0,245,255,0.4))}}
+  .robot-outline{fill:none;stroke:rgba(0,245,255,0.2);stroke-width:2;}
+  .robot-fill{fill:var(--cyan);transition:height 0.1s ease, y 0.1s ease;}
+  .loader-pct{font-family:'Orbitron',monospace;font-size:2.8rem;font-weight:900;color:var(--cyan);text-shadow:var(--glow);margin-top:-10px;}
+  .loader-text{font-family:'Share Tech Mono',monospace;font-size:.8rem;letter-spacing:.4em;color:rgba(0,245,255,.7);animation:loaderGlow 1.5s infinite alternate;}
+  @keyframes loaderGlow{from{opacity:0.5;}to{opacity:1;text-shadow:var(--glow);}}
+  .loader-sub{font-family:'Share Tech Mono',monospace;font-size:.65rem;letter-spacing:.2em;color:rgba(255,0,110,.6);text-transform:uppercase;}
 
+  @media(max-width:900px){
+    .games-container{grid-template-columns:1fr;}
+    .mobile-controls{display:flex;}
+  }
   @media(max-width:768px){
     nav{padding:16px 20px;}
     .nav-links{display:none;}
@@ -245,10 +322,58 @@
 
 <!-- LOADER -->
 <div id="loader">
-  <div class="loader-logo">SJ//</div>
-  <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
-  <div class="loader-text">INITIALIZING PORTFOLIO...</div>
-  <div class="loader-sub">SUBHAM JENA // MCA // AI &amp; BACKEND ENGINEER</div>
+  <svg class="loader-robot-svg" viewBox="0 0 100 100">
+    <g class="robot-outline" stroke-linejoin="round">
+      <polygon points="25,4 30,22 23,22" />
+      <polygon points="75,4 70,22 77,22" />
+      <rect x="20" y="22" width="60" height="6" />
+      <polygon points="45,10 55,10 58,18 55,22 45,22 42,18" />
+      <polygon points="30,28 70,28 70,35 55,50 45,50 30,35" />
+      <polyline points="33,30 46,30 50,35 46,40" />
+      <polyline points="67,30 54,30 50,35 54,40" />
+      <rect x="22" y="28" width="8" height="15" />
+      <rect x="70" y="28" width="8" height="15" />
+      <rect x="15" y="30" width="7" height="15" rx="2" />
+      <rect x="78" y="30" width="7" height="15" rx="2" />
+      <polygon points="22,43 30,43 32,60 20,60" />
+      <polygon points="70,43 78,43 80,60 68,60" />
+      <rect x="22" y="60" width="8" height="6" rx="1" />
+      <rect x="70" y="60" width="8" height="6" rx="1" />
+      <polygon points="45,50 55,50 53,55 47,55" />
+      <polygon points="35,46 43,46 43,73 32,73" />
+      <polygon points="57,46 65,46 68,73 57,73" />
+      <rect x="35" y="73" width="8" height="20" rx="2" />
+      <rect x="31" y="76" width="4" height="14" rx="1" />
+      <rect x="57" y="73" width="8" height="20" rx="2" />
+      <rect x="65" y="76" width="4" height="14" rx="1" />
+    </g>
+    <clipPath id="robot-clip">
+      <polygon points="25,4 30,22 23,22" />
+      <polygon points="75,4 70,22 77,22" />
+      <rect x="20" y="22" width="60" height="6" />
+      <polygon points="45,10 55,10 58,18 55,22 45,22 42,18" />
+      <polygon points="30,28 70,28 70,35 55,50 45,50 30,35" />
+      <rect x="22" y="28" width="8" height="15" />
+      <rect x="70" y="28" width="8" height="15" />
+      <rect x="15" y="30" width="7" height="15" rx="2" />
+      <rect x="78" y="30" width="7" height="15" rx="2" />
+      <polygon points="22,43 30,43 32,60 20,60" />
+      <polygon points="70,43 78,43 80,60 68,60" />
+      <rect x="22" y="60" width="8" height="6" rx="1" />
+      <rect x="70" y="60" width="8" height="6" rx="1" />
+      <polygon points="45,50 55,50 53,55 47,55" />
+      <polygon points="35,46 43,46 43,73 32,73" />
+      <polygon points="57,46 65,46 68,73 57,73" />
+      <rect x="35" y="73" width="8" height="20" rx="2" />
+      <rect x="31" y="76" width="4" height="14" rx="1" />
+      <rect x="57" y="73" width="8" height="20" rx="2" />
+      <rect x="65" y="76" width="4" height="14" rx="1" />
+    </clipPath>
+    <rect x="0" y="100" width="100" height="0" class="robot-fill" id="robotFillElement" clip-path="url(#robot-clip)" />
+  </svg>
+  <div class="loader-pct" id="loaderPct">0%</div>
+  <div class="loader-text">SYSTEM BOOT SEQUENCE</div>
+  <div class="loader-sub">AI CORE ENGAGED</div>
 </div>
 
 <!-- CURSOR -->
@@ -262,13 +387,41 @@
 
 <!-- NAV -->
 <nav>
-  <div class="nav-logo">SJ//</div>
+  <div class="nav-logo" style="display:flex;align-items:center;">
+    <svg viewBox="0 0 100 100" style="width:40px;height:40px;animation:levitate 3s ease-in-out infinite;">
+      <g fill="none" stroke="var(--cyan)" stroke-width="4" stroke-linejoin="round">
+        <polygon points="25,4 30,22 23,22" />
+        <polygon points="75,4 70,22 77,22" />
+        <rect x="20" y="22" width="60" height="6" />
+        <polygon points="45,10 55,10 58,18 55,22 45,22 42,18" />
+        <polygon points="30,28 70,28 70,35 55,50 45,50 30,35" />
+        <polyline points="33,30 46,30 50,35 46,40" />
+        <polyline points="67,30 54,30 50,35 54,40" />
+        <rect x="22" y="28" width="8" height="15" />
+        <rect x="70" y="28" width="8" height="15" />
+        <rect x="15" y="30" width="7" height="15" rx="2" />
+        <rect x="78" y="30" width="7" height="15" rx="2" />
+        <polygon points="22,43 30,43 32,60 20,60" />
+        <polygon points="70,43 78,43 80,60 68,60" />
+        <rect x="22" y="60" width="8" height="6" rx="1" />
+        <rect x="70" y="60" width="8" height="6" rx="1" />
+        <polygon points="45,50 55,50 53,55 47,55" />
+        <polygon points="35,46 43,46 43,73 32,73" />
+        <polygon points="57,46 65,46 68,73 57,73" />
+        <rect x="35" y="73" width="8" height="20" rx="2" />
+        <rect x="31" y="76" width="4" height="14" rx="1" />
+        <rect x="57" y="73" width="8" height="20" rx="2" />
+        <rect x="65" y="76" width="4" height="14" rx="1" />
+      </g>
+    </svg>
+  </div>
   <div class="nav-links">
     <a href="#about">About</a>
     <a href="#skills">Skills</a>
     <a href="#projects">Projects</a>
     <a href="#certifications">Certs</a>
     <a href="#education">Education</a>
+    <a href="#games">Games</a>
     <a href="#contact">Contact</a>
   </div>
   <div class="nav-status">
@@ -553,14 +706,106 @@
   </div>
 </section>
 
+<!-- GAMES ARCADE -->
+<section id="games">
+  <div class="section-wrap">
+    <div class="section-label reveal">07 — ARCADE</div>
+    <h2 class="section-title reveal">Neons & Pixels</h2>
+    
+    <div class="games-container">
+      
+      <!-- GAME 1: CYBER SNAKE -->
+      <div class="game-wrapper reveal" id="gw-snake">
+        <button class="btn-exit-fs" onclick="exitFullscreenGame('snake')">EXIT SYSTEM</button>
+        <div class="game-header">
+          <div class="game-score-display" id="snakeScoreDisplay">SCORE: <span id="snakeScore">0</span></div>
+          <div class="game-title" style="margin-left:auto;margin-right:auto;">CYBER_SNAKE</div>
+          <div style="width:100px;"></div> <!-- Spacer to keep title centered -->
+        </div>
+        <div class="game-canvas-area" id="snakeArea">
+          <canvas id="snakeCanvas" class="game-canvas"></canvas>
+          <div class="game-overlay" id="snakeOverlay">
+            <div class="game-over-title" id="snakeStatusText">CYBER SNAKE</div>
+            <div class="game-over-score" id="snakeFinalScoreDisplay"></div>
+            <div class="go-btn-row" id="snakeBtnRow">
+              <button class="game-btn" onmouseenter="playHoverSound()" onclick="playClickSound(); initGameSession('snake')">INITIALIZE</button>
+            </div>
+          </div>
+          <div class="game-intro-overlay" id="snakeIntro">
+            <div class="intro-text-1">INITIALIZING SYSTEM...</div>
+            <div class="intro-text-2">ENTERING ARCADE MODE</div>
+            <div class="intro-bar-bg"><div class="intro-bar-fg" id="snakeIntroBar"></div></div>
+          </div>
+        </div>
+        <div class="mobile-controls">
+          <div class="m-btn" id="s-up">↑</div>
+          <div class="m-btn" id="s-left">←</div>
+          <div class="m-btn" id="s-down">↓</div>
+          <div class="m-btn" id="s-right">→</div>
+        </div>
+        <div class="leaderboard">
+          <div class="lb-title">GLOBAL TOP 10</div>
+          <div id="snakeLB">
+            <div style="text-align:center;font-size:0.6rem;color:#666">LOADING...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GAME 2: ROCKET SHOOTER -->
+      <div class="game-wrapper rocket reveal reveal-delay-1" id="gw-rocket">
+        <button class="btn-exit-fs" onclick="exitFullscreenGame('rocket')">EXIT SYSTEM</button>
+        <div class="game-header">
+          <div class="game-score-display" id="rocketScoreDisplay">SCORE: <span id="rocketScore">0</span></div>
+          <div class="game-title" style="margin-left:auto;margin-right:auto;">NEO_STRIKE</div>
+          <div style="width:100px;"></div> <!-- Spacer to keep title centered -->
+        </div>
+        <div class="game-canvas-area" id="rocketArea">
+          <canvas id="rocketCanvas" class="game-canvas"></canvas>
+          <div class="game-overlay" id="rocketOverlay">
+            <div class="game-over-title" id="rocketStatusText">NEO STRIKE</div>
+            <div class="game-over-score" id="rocketFinalScoreDisplay"></div>
+            <div class="go-btn-row" id="rocketBtnRow">
+              <button class="game-btn" onmouseenter="playHoverSound()" onclick="playClickSound(); initGameSession('rocket')">ENGAGE</button>
+            </div>
+          </div>
+          <div class="game-intro-overlay" id="rocketIntro">
+            <div class="intro-text-1" style="color:var(--magenta)">SYSTEM OVERRIDE...</div>
+            <div class="intro-text-2">ENTERING COMBAT ZONE</div>
+            <div class="intro-bar-bg"><div class="intro-bar-fg" id="rocketIntroBar" style="background:var(--magenta);box-shadow:var(--glow-m)"></div></div>
+          </div>
+        </div>
+        <div class="mobile-controls">
+          <div class="m-btn" id="r-left">←</div>
+          <div class="m-btn" id="r-fire">🔥</div>
+          <div class="m-btn" id="r-right">→</div>
+        </div>
+        <div class="leaderboard">
+          <div class="lb-title">GLOBAL TOP 10</div>
+          <div id="rocketLB">
+            <div style="text-align:center;font-size:0.6rem;color:#666">LOADING...</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
 <!-- CONTACT -->
 <section id="contact">
   <div class="section-wrap">
     <div class="contact-wrap">
-      <div class="section-label reveal" style="justify-content:center">07 — CONTACT</div>
+      <div class="section-label reveal" style="justify-content:center">08 — CONTACT</div>
       <h2 class="section-title reveal">Let's Connect</h2>
       <p class="reveal">Looking for an entry-level Software Engineer or Data Science role where I can apply my ML and backend skills. Open to full-time positions, internships, and exciting collaborations.</p>
-      <div class="reveal"><a href="mailto:subhamj422@gmail.com" class="btn-primary">SEND EMAIL</a></div>
+      
+      <form class="contact-form reveal" id="frmContact" onsubmit="playClickSound(); submitContactForm(event)">
+        <input type="text" id="cName" placeholder="YOUR NAME" required autocomplete="off">
+        <input type="email" id="cEmail" placeholder="YOUR EMAIL" required autocomplete="off">
+        <textarea id="cMessage" placeholder="TRANSMISSION DATA..." required></textarea>
+        <button type="submit" class="btn-primary" id="cSubmitBtn" onmouseenter="playHoverSound()" style="width:100%;text-align:center;">SEND MESSAGE</button>
+      </form>
+
       <div class="contact-methods reveal">
         <a href="mailto:subhamj422@gmail.com" class="contact-method">
           <div class="contact-method-icon">📧</div>
@@ -591,50 +836,107 @@
 
 <!-- AI ASSISTANT -->
 <div id="ai-assistant">
-  <div id="ai-panel">
-    <div class="ai-header">
-      <div class="ai-avatar">🤖</div>
-      <div class="ai-header-text">
-        <h3>NOVA AI</h3>
-        <p>SUBHAM'S PORTFOLIO ASSISTANT</p>
-        <div class="ai-status-row">
-          <div class="ai-dot"></div>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(0,255,136,.7)" id="ai-status-text">ONLINE — READY</span>
-        </div>
+  <button id="ai-toggle" onmouseenter="playHoverSound()" onclick="playClickSound(); togglePanel()">
+  <svg viewBox="0 0 100 100" style="width:34px;height:34px;animation:levitate 3s ease-in-out infinite;margin-top:2px;">
+    <g fill="none" stroke="var(--cyan)" stroke-width="4" stroke-linejoin="round">
+      <polygon points="25,4 30,22 23,22" />
+      <polygon points="75,4 70,22 77,22" />
+      <rect x="20" y="22" width="60" height="6" />
+      <polygon points="45,10 55,10 58,18 55,22 45,22 42,18" />
+      <polygon points="30,28 70,28 70,35 55,50 45,50 30,35" />
+      <polyline points="33,30 46,30 50,35 46,40" />
+      <polyline points="67,30 54,30 50,35 54,40" />
+      <rect x="22" y="28" width="8" height="15" />
+      <rect x="70" y="28" width="8" height="15" />
+      <rect x="15" y="30" width="7" height="15" rx="2" />
+      <rect x="78" y="30" width="7" height="15" rx="2" />
+      <polygon points="22,43 30,43 32,60 20,60" />
+      <polygon points="70,43 78,43 80,60 68,60" />
+      <rect x="22" y="60" width="8" height="6" rx="1" />
+      <rect x="70" y="60" width="8" height="6" rx="1" />
+      <polygon points="45,50 55,50 53,55 47,55" />
+      <polygon points="35,46 43,46 43,73 32,73" />
+      <polygon points="57,46 65,46 68,73 57,73" />
+      <rect x="35" y="73" width="8" height="20" rx="2" />
+      <rect x="31" y="76" width="4" height="14" rx="1" />
+      <rect x="57" y="73" width="8" height="20" rx="2" />
+      <rect x="65" y="76" width="4" height="14" rx="1" />
+    </g>
+  </svg>
+</button>
+
+<div id="ai-panel">
+  <div class="ai-header">
+    <div class="ai-avatar">🤖</div>
+    <div class="ai-header-text">
+      <h3>TOXIBH AI</h3>
+      <p>TOXIBH</p>
+      <div class="ai-status-row">
+        <div class="ai-dot"></div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(0,255,136,.7)" id="ai-status-text">ONLINE — READY</span>
       </div>
     </div>
-    <div class="ai-messages" id="ai-messages">
-      <div class="msg msg-ai">
-        <div class="msg-bubble">Hi! I'm NOVA, Subham's AI assistant. Ask me about his skills, projects, education, or how to hire him. I can also speak answers aloud 🎙️</div>
-        <div class="msg-time">JUST NOW</div>
-      </div>
-    </div>
-    <div class="ai-controls">
-      <div class="ai-suggestions">
-        <button class="suggestion-chip" onclick="sendSuggestion('What are Subham\'s skills?')">SKILLS</button>
-        <button class="suggestion-chip" onclick="sendSuggestion('Tell me about his projects')">PROJECTS</button>
-        <button class="suggestion-chip" onclick="sendSuggestion('Is Subham available to hire?')">HIRE</button>
-        <button class="suggestion-chip" onclick="sendSuggestion('What is his education background?')">EDUCATION</button>
-      </div>
-      <div class="ai-input-row">
-        <input type="text" id="ai-input" placeholder="Ask about Subham..." />
-        <button id="voice-btn" title="Voice Input" onclick="toggleVoice()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="color:var(--cyan)"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        </button>
-        <button id="send-btn" onclick="sendMessage()" title="Send">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="color:var(--cyan)"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-      </div>
+    <button class="pm-close" id="ai-close" onclick="togglePanel()">✕</button>
+  </div>
+  <div class="ai-messages" id="ai-messages">
+    <div class="msg msg-ai">
+      <div class="msg-bubble">Hi! I'm TOXIBH, Subham's AI assistant. Ask me about his skills, projects, education, or how to hire him. I can also speak answers aloud 🎙️</div>
+      <div class="msg-time">JUST NOW</div>
     </div>
   </div>
-  <button id="ai-toggle" onclick="togglePanel()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--cyan)"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke-width="2"/><path d="M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41" opacity=".5"/></svg>
-  </button>
+  <div class="ai-controls">
+    <div class="ai-suggestions">
+      <button class="suggestion-chip" onclick="sendSuggestion('What are Subham\'s skills?')">SKILLS</button>
+      <button class="suggestion-chip" onclick="sendSuggestion('Tell me about his projects')">PROJECTS</button>
+      <button class="suggestion-chip" onclick="sendSuggestion('Is Subham available to hire?')">HIRE</button>
+      <button class="suggestion-chip" onclick="sendSuggestion('What is his education background?')">EDUCATION</button>
+    </div>
+    <div class="ai-input-row">
+      <input type="text" id="ai-input" placeholder="Ask about Subham..." />
+      <button id="voice-btn" title="Voice Input" onclick="toggleVoice()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="color:var(--cyan)"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+      <button id="send-btn" onclick="sendMessage()" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="color:var(--cyan)"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER NAME MODAL -->
+<div id="playerModal">
+  <div class="pm-box">
+    <button class="pm-close" onclick="closePlayerModal()">✕</button>
+    <div class="pm-title">ENTER PLAYER ID</div>
+    <div class="pm-desc">Your score will be recorded on the global leaderboard.</div>
+    <input type="text" id="playerNameInput" class="pm-input" placeholder="GUEST_404" maxlength="15" autocomplete="off">
+    <button class="btn-primary" style="width:100%" onmouseenter="playHoverSound()" onclick="playClickSound(); startGameAfterName()">PROCEED TO GAME</button>
+  </div>
 </div>
 
 <script>
 // LOADER
-window.addEventListener('load',()=>setTimeout(()=>document.getElementById('loader').classList.add('done'),2200));
+window.addEventListener('load', () => {
+  let progress = 0;
+  const pct = document.getElementById('loaderPct');
+  const fill = document.getElementById('robotFillElement');
+  
+  const timer = setInterval(() => {
+    progress += Math.floor(Math.random() * 8) + 2;
+    if (progress > 100) progress = 100;
+    
+    pct.textContent = progress + '%';
+    if(fill) {
+      fill.setAttribute('height', progress);
+      fill.setAttribute('y', 100 - progress);
+    }
+    
+    if (progress === 100) {
+      clearInterval(timer);
+      setTimeout(() => document.getElementById('loader').classList.add('done'), 400);
+    }
+  }, 30);
+});
 
 // CURSOR
 const cursor=document.getElementById('cursor'),ring=document.getElementById('cursor-ring');
@@ -667,8 +969,44 @@ document.querySelectorAll('.proj-canvas').forEach(c=>{
   drawM();
 });
 
-// SCROLL REVEAL
-const obs=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.12});
+// SCROLL REVEAL & AUDIO
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioContext = null;
+
+function playSynthSound(freq, type, duration, vol=0.1) {
+  if (!audioContext) return;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioContext.currentTime);
+  gain.gain.setValueAtTime(vol, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  osc.start();
+  osc.stop(audioContext.currentTime + duration);
+}
+
+function playHoverSound() { playSynthSound(800, 'sine', 0.1, 0.05); }
+function playClickSound() { playSynthSound(600, 'square', 0.1, 0.1); }
+function playLaserSound() { playSynthSound(300, 'sawtooth', 0.2, 0.1); }
+function playExplodeSound() { playSynthSound(100, 'square', 0.5, 0.2); }
+function playEatSound() { playSynthSound(1200, 'sine', 0.15, 0.1); }
+function playCrashSound() { playSynthSound(150, 'sawtooth', 0.4, 0.2); }
+function playTransitionSound() { playSynthSound(300, 'sine', 0.3, 0.05); }
+
+// INIT AUDIO ON FIRST CLICK
+document.body.addEventListener('click', () => {
+  if (!audioContext) audioContext = new AudioCtx();
+  if (audioContext.state === 'suspended') audioContext.resume();
+}, { once: true });
+
+document.querySelectorAll('a, button, .skill-card, .project-card, .cert-card, .contact-method').forEach(el => {
+  el.addEventListener('mouseenter', playHoverSound);
+  el.addEventListener('click', playClickSound);
+});
+
+const obs=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible'); playTransitionSound();}}),{threshold:.12});
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 
 // COUNT UP
@@ -687,7 +1025,7 @@ const kb={
   achievements:"Subham has won two Annual Professional Seminars (2022 & 2024), received the Best Paper Presentation Award from IRAJ in 2022, participated in a Varsity Hackathon, and served as Moderator for 200+ attendee events.",
   certifications:"Subham holds 4 certifications: HackerRank Software Engineer Intern Role (Aug 2025), Cloud Computing & DevOps from ExcelR (May 2025), Git & GitHub from Udemy (Jan 2025), and Python from University of Leeds (Mar 2023).",
   contact:"Reach Subham at subhamj422@gmail.com, call +91 6309527017, connect on LinkedIn at linkedin.com/in/shubbhhx, or find his code at github.com/shubbhhx.",
-  default:"I'm Subham's portfolio AI! I can tell you about his skills, projects, education, certifications, achievements, or how to contact him. What would you like to know?"
+  default:"I'm TOXIBH, Subham's portfolio AI! I can tell you about his skills, projects, education, certifications, achievements, or how to contact him. What would you like to know?"
 };
 
 function getResponse(input){
@@ -702,9 +1040,9 @@ function getResponse(input){
   return kb.default;
 }
 
-function addMessage(text,from){
+function addMessage(text, sender) {
   const msgs=document.getElementById('ai-messages'),div=document.createElement('div');
-  div.className=`msg msg-${from}`;
+  div.className=`msg msg-${sender}`;
   const now=new Date();
   div.innerHTML=`<div class="msg-bubble">${text}</div><div class="msg-time">${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}</div>`;
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
@@ -787,6 +1125,658 @@ function toggleVoice(){
 }
 if(synth)synth.getVoices();
 if(window.speechSynthesis&&window.speechSynthesis.onvoiceschanged!==undefined)window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();
+
+// ─────────────────────────────────────────────────────────
+//  FUTURISTIC GAMES ENGINE (CANVAS)
+// ─────────────────────────────────────────────────────────
+
+let currentPlayerName = "GUEST";
+let pendingGameToStart = null;
+
+// Game State Definitions
+const GSTATE = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+
+// Canvas Setup Function
+function resizeGameCanvas(c) {
+  const p = c.parentElement;
+  c.width = p.clientWidth;
+  c.height = p.clientHeight;
+}
+
+// Global Leaderboard Fetch
+async function loadLeaderboard(gameName, targetDivId) {
+  try {
+    const r = await fetch(`/api/game/leaderboard?game_name=${gameName}`);
+    const data = await r.json();
+    const lbDiv = document.getElementById(targetDivId);
+    
+    if (data.length === 0) {
+      lbDiv.innerHTML = `<div style="text-align:center;font-size:0.6rem;color:#666;padding:10px">NO SCORES YET</div>`;
+      return;
+    }
+    
+    lbDiv.innerHTML = data.map((s, i) => `
+      <div class="lb-row">
+        <span class="lb-rank">#${i+1}</span>
+        <span class="lb-name">${s.player_name}</span>
+        <span class="lb-score">${s.score}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error("LB fetch failed", e);
+  }
+}
+
+async function submitScore(gameName, score) {
+  if (score <= 0) return;
+  try {
+    await fetch('/api/game/submit_score', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({player_name: currentPlayerName, game_name: gameName, score: score})
+    });
+    // Refresh LBs
+    loadLeaderboard('snake', 'snakeLB');
+    loadLeaderboard('rocket', 'rocketLB');
+  } catch (e) {
+    console.error("Score submit failed", e);
+  }
+}
+
+// Modal Logic
+function initGameSession(gameType) {
+  pendingGameToStart = gameType;
+  
+  const cachedName = localStorage.getItem('svj_playerName');
+  if (cachedName) {
+    currentPlayerName = cachedName;
+    launchFullscreenGameSequence(pendingGameToStart);
+    pendingGameToStart = null;
+    return;
+  }
+  
+  document.getElementById('playerNameInput').value = "";
+  document.getElementById('playerModal').classList.add('show');
+  document.getElementById('playerNameInput').focus();
+}
+
+function closePlayerModal() {
+  document.getElementById('playerModal').classList.remove('show');
+  pendingGameToStart = null;
+}
+
+function startGameAfterName() {
+  const inp = document.getElementById('playerNameInput').value.trim();
+  if (inp) currentPlayerName = inp.toUpperCase();
+  else currentPlayerName = "GUEST_" + Math.floor(Math.random()*9000+1000);
+  
+  localStorage.setItem('svj_playerName', currentPlayerName);
+  document.getElementById('playerModal').classList.remove('show');
+  
+  launchFullscreenGameSequence(pendingGameToStart);
+  pendingGameToStart = null;
+}
+document.getElementById('playerNameInput').addEventListener('keydown', e => { if(e.key==='Enter') startGameAfterName() });
+
+// ── FULLSCREEN & INTRO SEQUENCE ──
+let floatingScores = [];
+
+function launchFullscreenGameSequence(gameType) {
+  const wrapper = document.getElementById(`gw-${gameType}`);
+  
+  // Request Fullscreen on Wrapper
+  if (wrapper.requestFullscreen) wrapper.requestFullscreen();
+  else if (wrapper.webkitRequestFullscreen) wrapper.webkitRequestFullscreen();
+  else if (wrapper.msRequestFullscreen) wrapper.msRequestFullscreen();
+  
+  wrapper.classList.add('fs-mode');
+  
+  // Hide normal overlay
+  document.getElementById(`${gameType}Overlay`).classList.add('hidden');
+  
+  // Show Intro overlay
+  const intro = document.getElementById(`${gameType}Intro`);
+  const bar = document.getElementById(`${gameType}IntroBar`);
+  intro.style.display = 'flex';
+  bar.style.width = '0%';
+  
+  // Animate Bar
+  let progress = 0;
+  const t = setInterval(() => {
+    progress += Math.random() * 8 + 4;
+    if (progress > 100) progress = 100;
+    bar.style.width = `${progress}%`;
+    if (progress === 100) {
+      clearInterval(t);
+      setTimeout(() => {
+        intro.style.display = 'none';
+        
+        // Start Game
+        if (gameType === 'snake') startSnakeGame();
+        else if (gameType === 'rocket') startRocketGame();
+        
+      }, 400);
+    }
+  }, 50);
+}
+
+function exitFullscreenGame(gameType) {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  else if (document.msExitFullscreen) document.msExitFullscreen();
+  
+  const wrapper = document.getElementById(`gw-${gameType}`);
+  wrapper.classList.remove('fs-mode');
+  
+  if (gameType === 'snake' && sState === GSTATE.PLAYING) gameOverSnake();
+  if (gameType === 'rocket' && rState === GSTATE.PLAYING) gameOverRocket();
+
+  setTimeout(() => {
+    if (gameType === 'snake') {
+      document.getElementById('snakeStatusText').textContent = "CYBER SNAKE";
+      document.getElementById('snakeFinalScoreDisplay').style.display = 'none';
+      document.getElementById('snakeBtnRow').innerHTML = `<button class="game-btn" onclick="initGameSession('snake')">INITIALIZE</button>`;
+    } else if (gameType === 'rocket') {
+      document.getElementById('rocketStatusText').textContent = "NEO STRIKE";
+      document.getElementById('rocketFinalScoreDisplay').style.display = 'none';
+      document.getElementById('rocketBtnRow').innerHTML = `<button class="game-btn" onclick="initGameSession('rocket')">ENGAGE</button>`;
+    }
+  }, 500);
+}
+
+// Handle ESC key or native exits
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    document.getElementById('gw-snake').classList.remove('fs-mode');
+    document.getElementById('gw-rocket').classList.remove('fs-mode');
+    
+    // Resize canvases back down based on actual DOM bounds
+    setTimeout(() => {
+      resizeGameCanvas(sCanvas); if(sState===GSTATE.PLAYING) snakeLoop(performance.now(), true);
+      resizeGameCanvas(rCanvas); if(rState===GSTATE.PLAYING) rocketLoop(performance.now(), true);
+    }, 100);
+  } else {
+    // If entered fullscreen, ensure canvases use the new big sizes
+    setTimeout(() => {
+      resizeGameCanvas(sCanvas);
+      resizeGameCanvas(rCanvas);
+    }, 100);
+  }
+});
+
+function drawFloatingScores(ctx) {
+  for (let i = floatingScores.length - 1; i >= 0; i--) {
+    let s = floatingScores[i];
+    s.y -= s.vy;
+    s.life -= 0.02;
+    if (s.life <= 0) { floatingScores.splice(i, 1); continue; }
+    ctx.font = `bold ${s.size}px 'Share Tech Mono', monospace`;
+    ctx.fillStyle = `rgba(${s.color},${s.life})`;
+    ctx.fillText(`+${s.val}`, s.x, s.y);
+  }
+}
+
+function triggerScreenShake(canvasId) {
+  const c = document.getElementById(canvasId);
+  c.classList.remove('shake');
+  void c.offsetWidth; // trigger reflow
+  c.classList.add('shake');
+}
+
+// ── 1. CYBER SNAKE ──
+const sCanvas = document.getElementById('snakeCanvas');
+const sCtx = sCanvas.getContext('2d');
+let snakeInterval, snakeReq;
+let sState = GSTATE.MENU;
+
+let sGrid = 20;
+let snake = [];
+let sDir = {x:sGrid, y:0};
+let sNextDir = {x:sGrid, y:0};
+let sFood = {x:0, y:0};
+let sScore = 0;
+let sParticles = [];
+let sSpeed = 120; // ms
+
+function initSnake() {
+  resizeGameCanvas(sCanvas);
+  sGrid = Math.floor(sCanvas.width / 25);
+  snake = [
+    {x: Math.floor(sCanvas.width/2/sGrid)*sGrid, y: Math.floor(sCanvas.height/2/sGrid)*sGrid},
+    {x: Math.floor(sCanvas.width/2/sGrid)*sGrid - sGrid, y: Math.floor(sCanvas.height/2/sGrid)*sGrid}
+  ];
+  sScore = 0;
+  sSpeed = 120;
+  sDir = {x:sGrid, y:0};
+  sNextDir = {x:sGrid, y:0};
+  sParticles = [];
+  document.getElementById('snakeScore').textContent = "0";
+  spawnFood();
+}
+
+function spawnFood() {
+  const maxCols = Math.floor(sCanvas.width / sGrid) - 1;
+  const maxRows = Math.floor(sCanvas.height / sGrid) - 1;
+  while(true) {
+    sFood.x = Math.floor(Math.random() * maxCols) * sGrid;
+    sFood.y = Math.floor(Math.random() * maxRows) * sGrid;
+    // Check collision with snake
+    if(!snake.some(seg => seg.x === sFood.x && seg.y === sFood.y)) break;
+  }
+}
+
+function spawnSnakeParticles(px, py, color, count=25) {
+  for(let i=0; i<count; i++) {
+    sParticles.push({
+      x: px + sGrid/2, y: py + sGrid/2,
+      vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12,
+      life: 1.0, color: color, size: Math.random()*4+2
+    });
+  }
+}
+
+function startSnakeGame() {
+  initSnake();
+  document.getElementById('snakeOverlay').classList.add('hidden');
+  sState = GSTATE.PLAYING;
+  document.getElementById('snakeScoreDisplay').style.display = 'block';
+  document.getElementById('snakeFinalScoreDisplay').style.display = 'none';
+  lastSnakeTime = performance.now();
+  if(snakeReq) cancelAnimationFrame(snakeReq);
+  snakeLoop(performance.now(), false);
+}
+
+function gameOverSnake() {
+  triggerScreenShake('snakeCanvas');
+  sState = GSTATE.GAMEOVER;
+  document.getElementById('snakeScoreDisplay').style.display = 'none';
+  document.getElementById('snakeOverlay').classList.remove('hidden');
+  document.getElementById('snakeStatusText').textContent = "CRASHED";
+  document.getElementById('snakeFinalScoreDisplay').style.display = 'block';
+  document.getElementById('snakeFinalScoreDisplay').textContent = "FINAL SCORE: " + sScore;
+  document.getElementById('snakeBtnRow').innerHTML = `
+    <button class="game-btn" onclick="startSnakeGame(); playClickSound();">PLAY AGAIN</button>
+    <button class="game-btn" style="background:transparent;border:1px solid var(--magenta);color:var(--magenta);" onclick="exitFullscreenGame('snake'); playClickSound();">EXIT GAME</button>
+  `;
+  spawnSnakeParticles(snake[0].x, snake[0].y, '255,0,110', 80);
+  submitScore('snake', sScore);
+  playCrashSound();
+}
+
+let lastSnakeTime = 0;
+function snakeLoop(time, forcedDraw = false) {
+  if (sState === GSTATE.PLAYING && !forcedDraw) {
+    snakeReq = requestAnimationFrame(snakeLoop);
+  } else if (sState === GSTATE.GAMEOVER && !forcedDraw) {
+    snakeReq = requestAnimationFrame(snakeLoop); // let particles render
+  }
+  
+  // Logical Update
+  if (sState === GSTATE.PLAYING && time - lastSnakeTime >= sSpeed && !forcedDraw) {
+    lastSnakeTime = time;
+    sDir = sNextDir;
+    const head = {x: snake[0].x + sDir.x, y: snake[0].y + sDir.y};
+    
+    // Constraints (Walls)
+    if (head.x < 0 || head.x >= sCanvas.width || head.y < 0 || head.y >= sCanvas.height) {
+      gameOverSnake();
+      return;
+    }
+    // Self Collision
+    if (snake.some(seg => seg.x === head.x && seg.y === head.y)) {
+      gameOverSnake();
+      return;
+    }
+    
+    snake.unshift(head);
+    
+    // Food eating
+    if (Math.abs(head.x - sFood.x) < sGrid*0.5 && Math.abs(head.y - sFood.y) < sGrid*0.5) {
+      sScore += 10;
+      document.getElementById('snakeScore').textContent = sScore;
+      floatingScores.push({x: sFood.x, y: sFood.y-10, val: 10, life: 1, vy: 1.5, size: 24, color: '0,245,255'});
+      spawnSnakeParticles(sFood.x, sFood.y, '0,245,255', 30);
+      if(sSpeed > 50) sSpeed -= 3; // Increase speed
+      spawnFood();
+      playEatSound();
+    } else {
+      snake.pop();
+    }
+  }
+
+  // Draw
+  sCtx.fillStyle = 'rgba(0,0,0,0.35)';
+  sCtx.fillRect(0, 0, sCanvas.width, sCanvas.height);
+  
+  sCtx.globalCompositeOperation = 'lighter';
+
+  // Draw Particles
+  for (let i = sParticles.length-1; i>=0; i--) {
+    let p = sParticles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.life -= 0.04;
+    if (p.life <= 0) { sParticles.splice(i, 1); continue; }
+    sCtx.shadowBlur = 15;
+    sCtx.shadowColor = `rgb(${p.color})`;
+    sCtx.fillStyle = `rgba(${p.color},${p.life})`;
+    sCtx.beginPath(); sCtx.arc(p.x, p.y, p.size, 0, Math.PI*2); sCtx.fill();
+  }
+  
+  sCtx.globalCompositeOperation = 'source-over';
+  sCtx.shadowBlur = 0;
+
+  // Draw Food
+  sCtx.shadowBlur = 20;
+  sCtx.shadowColor = '#00f5ff';
+  sCtx.fillStyle = '#00f5ff';
+  sCtx.fillRect(sFood.x, sFood.y, sGrid-2, sGrid-2);
+
+  // Draw Snake
+  snake.forEach((seg, i) => {
+    sCtx.shadowBlur = i===0 ? 25 : 10;
+    sCtx.shadowColor = i===0 ? '#00ff88' : '#00a35c';
+    sCtx.fillStyle = i===0 ? '#00ff88' : '#00a35c';
+    sCtx.fillRect(seg.x, seg.y, sGrid-2, sGrid-2);
+  });
+  
+  sCtx.shadowBlur = 0;
+  drawFloatingScores(sCtx);
+}
+
+// Snake Input
+window.addEventListener('keydown', e => {
+  if(sState !== GSTATE.PLAYING) return;
+  if (['ArrowUp','w','W'].includes(e.key) && sDir.y === 0) sNextDir = {x:0, y:-sGrid};
+  if (['ArrowDown','s','S'].includes(e.key) && sDir.y === 0) sNextDir = {x:0, y:sGrid};
+  if (['ArrowLeft','a','A'].includes(e.key) && sDir.x === 0) sNextDir = {x:-sGrid, y:0};
+  if (['ArrowRight','d','D'].includes(e.key) && sDir.x === 0) sNextDir = {x:sGrid, y:0};
+});
+document.getElementById('s-up').ontouchstart = (e) => { e.preventDefault(); if (sDir.y === 0) sNextDir = {x:0, y:-sGrid};};
+document.getElementById('s-down').ontouchstart = (e) => { e.preventDefault(); if (sDir.y === 0) sNextDir = {x:0, y:sGrid};};
+document.getElementById('s-left').ontouchstart = (e) => { e.preventDefault(); if (sDir.x === 0) sNextDir = {x:-sGrid, y:0};};
+document.getElementById('s-right').ontouchstart = (e) => { e.preventDefault(); if (sDir.x === 0) sNextDir = {x:sGrid, y:0};};
+
+
+// ── 2. ROCKET SHOOTER ──
+const rCanvas = document.getElementById('rocketCanvas');
+const rCtx = rCanvas.getContext('2d');
+let rReq;
+let rState = GSTATE.MENU;
+
+let player = {x:0, y:0, w:30, h:40, speed:6, vx:0};
+let lasers = [];
+let enemies = [];
+let rParticles = [];
+let stars = [];
+let rScore = 0;
+let enemySpawnRate = 0.02;
+
+function initRocket() {
+  resizeGameCanvas(rCanvas);
+  player.x = rCanvas.width/2 - player.w/2;
+  player.y = rCanvas.height - player.h - 20;
+  player.vx = 0;
+  lasers = [];
+  enemies = [];
+  rParticles = [];
+  rScore = 0;
+  enemySpawnRate = 0.02;
+  document.getElementById('rocketScore').textContent = '0';
+  
+  // init stars
+  stars = [];
+  for(let i=0; i<80; i++) {
+    stars.push({x: Math.random()*rCanvas.width, y: Math.random()*rCanvas.height, size: Math.random()*2, speed: Math.random()*3+1});
+  }
+}
+
+function rShoot() {
+  if (rState !== GSTATE.PLAYING) return;
+  lasers.push({x: player.x + player.w/2 - 2, y: player.y, w: 4, h: 15, speed: 10});
+  playLaserSound();
+}
+
+function rExplode(x, y, color) {
+  for(let i=0; i<40; i++) {
+    rParticles.push({
+      x: x, y: y,
+      vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
+      life: 1.0, color: color, size: Math.random()*5+2
+    });
+  }
+}
+
+function startRocketGame() {
+  initRocket();
+  document.getElementById('rocketOverlay').classList.add('hidden');
+  rState = GSTATE.PLAYING;
+  document.getElementById('rocketScoreDisplay').style.display = 'block';
+  document.getElementById('rocketFinalScoreDisplay').style.display = 'none';
+  if(rReq) cancelAnimationFrame(rReq);
+  rocketLoop(performance.now(), false);
+}
+
+function gameOverRocket() {
+  triggerScreenShake('rocketCanvas');
+  rState = GSTATE.GAMEOVER;
+  document.getElementById('rocketScoreDisplay').style.display = 'none';
+  document.getElementById('rocketOverlay').classList.remove('hidden');
+  document.getElementById('rocketStatusText').textContent = "DESTROYED";
+  document.getElementById('rocketFinalScoreDisplay').style.display = 'block';
+  document.getElementById('rocketFinalScoreDisplay').textContent = "FINAL SCORE: " + rScore;
+  document.getElementById('rocketBtnRow').innerHTML = `
+    <button class="game-btn" onclick="startRocketGame(); playClickSound();">PLAY AGAIN</button>
+    <button class="game-btn" style="background:transparent;border:1px solid var(--magenta);color:var(--magenta);" onclick="exitFullscreenGame('rocket'); playClickSound();">EXIT GAME</button>
+  `;
+  rExplode(player.x+player.w/2, player.y+player.h/2, '0,245,255');
+  submitScore('rocket', rScore);
+  playCrashSound();
+}
+
+// Rocket Input
+let keys = {};
+window.addEventListener('keydown', e => keys[e.key] = true);
+window.addEventListener('keyup', e => {
+  keys[e.key] = false;
+  if(e.key === ' ' || e.key === 'Enter') rShoot();
+});
+
+// Mobile Input
+let mLeft = false, mRight = false;
+document.getElementById('r-left').ontouchstart = (e) => { e.preventDefault(); mLeft = true; }
+document.getElementById('r-left').ontouchend = (e) => { e.preventDefault(); mLeft = false; }
+document.getElementById('r-right').ontouchstart = (e) => { e.preventDefault(); mRight = true; }
+document.getElementById('r-right').ontouchend = (e) => { e.preventDefault(); mRight = false; }
+document.getElementById('r-fire').ontouchstart = (e) => { e.preventDefault(); rShoot(); }
+
+function rocketLoop(time, forcedDraw = false) {
+  if (rState === GSTATE.PLAYING && !forcedDraw) {
+    rReq = requestAnimationFrame(rocketLoop);
+  } else if (rState === GSTATE.GAMEOVER && !forcedDraw) {
+    rReq = requestAnimationFrame(rocketLoop);
+  }
+
+  rCtx.fillStyle = 'rgba(0,0,0,0.4)';
+  rCtx.fillRect(0, 0, rCanvas.width, rCanvas.height);
+
+  // Stars background
+  rCtx.fillStyle = '#fff';
+  stars.forEach(s => {
+    if(!forcedDraw) {
+      s.y += s.speed;
+      if(s.y > rCanvas.height) { s.y = 0; s.x = Math.random()*rCanvas.width; }
+    }
+    rCtx.fillRect(s.x, s.y, s.size, s.size);
+  });
+
+  if (rState === GSTATE.PLAYING && !forcedDraw) {
+    // Player movement
+    if ((keys['ArrowLeft'] || keys['a'] || mLeft) && player.x > 0) player.vx = -player.speed;
+    else if ((keys['ArrowRight'] || keys['d'] || mRight) && player.x < rCanvas.width - player.w) player.vx = player.speed;
+    else player.vx = player.vx * 0.8; // friction
+    
+    player.x += player.vx;
+    // Bounds check
+    if (player.x < 0) player.x = 0;
+    if (player.x > rCanvas.width - player.w) player.x = rCanvas.width - player.w;
+
+    // Lasers
+    for (let i = lasers.length-1; i>=0; i--) {
+      let l = lasers[i];
+      l.y -= l.speed;
+      if (l.y < 0) { lasers.splice(i,1); continue; }
+      rCtx.shadowBlur = 10;
+      rCtx.shadowColor = '#00f5ff';
+      rCtx.fillStyle = '#00f5ff';
+      rCtx.fillRect(l.x, l.y, l.w, l.h);
+    }
+    rCtx.shadowBlur = 0;
+
+    // Enemies
+    if (Math.random() < enemySpawnRate) {
+      enemies.push({
+        x: Math.random() * (rCanvas.width - 30), y: -30,
+        w: 30, h: 30, speed: Math.random()*2+1 + (rScore/500)
+      });
+    }
+    enemySpawnRate += 0.00001; // difficulty ramp
+    
+    for (let i = enemies.length-1; i>=0; i--) {
+      let e = enemies[i];
+      e.y += e.speed;
+      
+      // Collision with Player
+      if (e.x < player.x+player.w && e.x+e.w > player.x && e.y < player.y+player.h && e.y+e.h > player.y) {
+        gameOverRocket();
+        break;
+      }
+      // Pass boundary
+      if (e.y > rCanvas.height) {
+        enemies.splice(i,1); continue; 
+      }
+      
+      // Collision with Lasers
+      let hit = false;
+      for (let j = lasers.length-1; j>=0; j--) {
+        let l = lasers[j];
+        if (l.x < e.x+e.w && l.x+l.w > e.x && l.y < e.y+e.h && l.y+l.h > e.y) {
+          hit = true;
+          lasers.splice(j,1);
+          rScore += 15;
+          document.getElementById('rocketScore').textContent = rScore;
+          triggerScreenShake('rocketCanvas');
+          floatingScores.push({x: e.x, y: e.y, val: 15, life: 1, vy: 2, size: 28, color: '255,0,110'});
+          rExplode(e.x+e.w/2, e.y+e.h/2, '255,0,110');
+          playExplodeSound();
+          break;
+        }
+      }
+      if (hit) { enemies.splice(i,1); continue; }
+
+      // Draw Enemy
+      rCtx.shadowBlur = 15;
+      rCtx.shadowColor = '#ff006e';
+      rCtx.fillStyle = '#ff006e';
+      
+      rCtx.beginPath();
+      rCtx.moveTo(e.x + e.w/2, e.y + e.h);
+      rCtx.lineTo(e.x + e.w, e.y);
+      rCtx.lineTo(e.x, e.y);
+      rCtx.closePath();
+      rCtx.fill();
+    }
+    rCtx.shadowBlur = 0;
+
+    // Player Jet Flame
+    if (player.vx !== 0 || Math.random()>0.2) {
+      rCtx.fillStyle = 'rgba(0,245,255,0.7)';
+      rCtx.beginPath();
+      rCtx.moveTo(player.x+10, player.y+player.h);
+      rCtx.lineTo(player.x+20, player.y+player.h);
+      rCtx.lineTo(player.x+15, player.y+player.h+Math.random()*20+5);
+      rCtx.closePath();
+      rCtx.fill();
+    }
+
+    // Draw Player Ship
+    rCtx.shadowBlur = 15;
+    rCtx.shadowColor = '#00f5ff';
+    rCtx.fillStyle = '#00f5ff';
+    rCtx.beginPath();
+    rCtx.moveTo(player.x + player.w/2, player.y);
+    rCtx.lineTo(player.x + player.w, player.y + player.h);
+    rCtx.lineTo(player.x + player.w/2, player.y + player.h - 10);
+    rCtx.lineTo(player.x, player.y + player.h);
+    rCtx.closePath();
+    rCtx.fill();
+    rCtx.shadowBlur = 0;
+  }
+
+  rCtx.globalCompositeOperation = 'lighter';
+  
+  // Draw Particles
+  for (let i = rParticles.length-1; i>=0; i--) {
+    let p = rParticles[i];
+    if(!forcedDraw) {
+      p.x += p.vx; p.y += p.vy;
+      p.life -= 0.03;
+    }
+    if (p.life <= 0) { rParticles.splice(i, 1); continue; }
+    rCtx.shadowBlur = 20;
+    rCtx.shadowColor = `rgb(${p.color})`;
+    rCtx.fillStyle = `rgba(${p.color},${p.life})`;
+    rCtx.beginPath(); rCtx.arc(p.x, p.y, p.size, 0, Math.PI*2); rCtx.fill();
+  }
+  
+  rCtx.globalCompositeOperation = 'source-over';
+  rCtx.shadowBlur = 0;
+  drawFloatingScores(rCtx);
+}
+
+// Ensure Canvas sizes correctly on load/resize
+window.addEventListener('resize', () => {
+  resizeGameCanvas(sCanvas);
+  resizeGameCanvas(rCanvas);
+});
+
+// Load LBs initially
+window.addEventListener('DOMContentLoaded', () => {
+  loadLeaderboard('snake', 'snakeLB');
+  loadLeaderboard('rocket', 'rocketLB');
+});
+
+async function submitContactForm(e) {
+  e.preventDefault();
+  const btn = document.getElementById('cSubmitBtn');
+  btn.textContent = 'TRANSMITTING...';
+  
+  const payload = {
+    name: document.getElementById('cName').value,
+    email: document.getElementById('cEmail').value,
+    message: document.getElementById('cMessage').value
+  };
+  
+  try {
+    const r = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      btn.style.background = 'var(--green)';
+      btn.style.color = '#000';
+      btn.textContent = 'MESSAGE SENT!';
+      document.getElementById('frmContact').reset();
+      setTimeout(() => {
+        btn.style.background = 'var(--cyan)';
+        btn.textContent = 'SEND MESSAGE';
+      }, 3000);
+    }
+  } catch(err) {
+    btn.textContent = 'ERROR SENDING';
+  }
+}
+
 </script>
 </body>
 </html>

@@ -3,15 +3,16 @@
 #  Run:  python app.py
 # ═══════════════════════════════════════════════════════════
 
-import os, uuid, bcrypt, mimetypes, json
+import os, uuid, bcrypt, mimetypes, json, time
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (Flask, request, jsonify, session,
-                   send_from_directory, abort)
+                   send_from_directory, abort, g, redirect)
 from werkzeug.utils import secure_filename
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
+import psutil
 import db
 
 # ── APP SETUP ────────────────────────────────────────────
@@ -52,6 +53,34 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+# ── SERVER METRICS TRACKING ──────────────────────────────
+server_metrics = {
+    'total_requests': 0,
+    'error_count': 0,
+    'total_response_time': 0.0,
+    'start_time': time.time(),
+    'requests_last_minute': []
+}
+
+@app.before_request
+def before_request_tracking():
+    g.start_time = time.time()
+    if request.path.startswith('/api/'):
+        server_metrics['total_requests'] += 1
+        now = time.time()
+        server_metrics['requests_last_minute'].append(now)
+        # Clean up old requests beyond 60 seconds for rate calculation
+        server_metrics['requests_last_minute'] = [t for t in server_metrics['requests_last_minute'] if now - t < 60]
+
+@app.after_request
+def after_request_tracking(response):
+    if hasattr(g, 'start_time') and request.path.startswith('/api/'):
+        duration = time.time() - g.start_time
+        server_metrics['total_response_time'] += duration
+        if response.status_code >= 400:
+            server_metrics['error_count'] += 1
+    return response
+
 # ── VISITOR TRACKER ───────────────────────────────────────
 @app.before_request
 def track_visitor():
@@ -76,6 +105,8 @@ def portfolio():
 
 @app.route('/admin')
 def admin_page():
+    if not session.get('bot_unlocked'):
+        return redirect('/')
     return send_from_directory('templates', 'admin.html')
 
 # Protected file serving
@@ -99,6 +130,7 @@ def check_key():
     if is_valid:
         session.permanent = True
         session['admin'] = True
+        session['bot_unlocked'] = True
         session['login_time'] = datetime.utcnow().isoformat()
     return jsonify({'valid': is_valid})
 
@@ -171,6 +203,68 @@ def stats():
             'photos': sum(1 for f in files if f.get('type') == 'photo'),
             'pdfs': sum(1 for f in files if f.get('type') == 'pdf'),
             'visitorChart': chart
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ══════════════════════════════════════════════════════════
+#  REAL-TIME METRICS
+# ══════════════════════════════════════════════════════════
+@app.route('/api/metrics/system')
+@admin_required
+def metric_system():
+    try:
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        net = psutil.net_io_counters()
+        uptime_seconds = time.time() - psutil.boot_time()
+        
+        h = int(uptime_seconds // 3600)
+        m = int((uptime_seconds % 3600) // 60)
+        
+        return jsonify({
+            'cpu': psutil.cpu_percent(interval=0.1),
+            'ram': mem.percent,
+            'disk': disk.percent,
+            'processes': len(psutil.pids()),
+            'uptime': f"{h}h {m}m",
+            'net_sent': net.bytes_sent,
+            'net_recv': net.bytes_recv
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/metrics/server')
+@admin_required
+def metric_server():
+    req_rate = len(server_metrics['requests_last_minute'])
+    avg_resp = 0
+    if server_metrics['total_requests'] > 0:
+        avg_resp = (server_metrics['total_response_time'] / server_metrics['total_requests']) * 1000 # in ms
+        
+    return jsonify({
+        'total_requests': server_metrics['total_requests'],
+        'request_rate': f"{req_rate}/min",
+        'error_count': server_metrics['error_count'],
+        'avg_response_time': f"{avg_resp:.2f} ms"
+    })
+
+@app.route('/api/metrics/application')
+@admin_required
+def metric_application():
+    try:
+        visitors = db.fetch_one("SELECT COUNT(*) as c FROM visitors")['c']
+        chatbots = db.fetch_one("SELECT COUNT(*) as c FROM chatbot_logs")['c']
+        messages = db.fetch_one("SELECT COUNT(*) as c FROM messages")['c']
+        # Active users could just be unique IPs today as a proxy
+        today = datetime.utcnow().date().isoformat()
+        active = db.fetch_one("SELECT COUNT(DISTINCT ip) as c FROM visitors WHERE substr(time, 1, 10) = ?", (today,))['c']
+        
+        return jsonify({
+            'total_visitors': visitors,
+            'chatbot_conversations': chatbots,
+            'contact_messages': messages,
+            'active_users': active
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -434,6 +528,46 @@ def del_file(file_id):
         except: pass
         db.execute_query("DELETE FROM files WHERE id = ?", (file_id,))
     return jsonify({'success': True})
+
+# ══════════════════════════════════════════════════════════
+#  GAMES LEADERBOARD
+# ══════════════════════════════════════════════════════════
+@app.route('/api/game/submit_score', methods=['POST'])
+def submit_game_score():
+    data = request.get_json(silent=True) or {}
+    player_name = data.get('player_name', '').strip()[:15]
+    game_name = data.get('game_name', '').strip()
+    score = data.get('score', 0)
+    
+    if not player_name: player_name = "Anonymous"
+    if not game_name or not isinstance(score, int):
+        return jsonify({'error': 'Invalid data'}), 400
+        
+    s_id = str(uuid.uuid4())
+    time_now = datetime.utcnow().isoformat()
+    
+    db.execute_query('''
+        INSERT INTO game_scores (id, player_name, game_name, score, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (s_id, player_name, game_name, score, time_now))
+    
+    return jsonify({'success': True})
+
+@app.route('/api/game/leaderboard')
+def get_game_leaderboard():
+    game_name = request.args.get('game_name', '')
+    if not game_name:
+        return jsonify({'error': 'Game name required'}), 400
+        
+    scores = db.fetch_all('''
+        SELECT player_name, score 
+        FROM game_scores 
+        WHERE game_name = ? 
+        ORDER BY score DESC 
+        LIMIT 10
+    ''', (game_name,))
+    
+    return jsonify(scores)
 
 # ══════════════════════════════════════════════════════════
 #  RUN

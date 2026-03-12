@@ -99,6 +99,17 @@ def init_db():
         )
     ''')
     
+    # Game Scores
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS game_scores (
+            id TEXT PRIMARY KEY,
+            player_name TEXT,
+            game_name TEXT,
+            score INTEGER,
+            timestamp TEXT
+        )
+    ''')
+    
     # Create default admin if not exists
     c.execute("SELECT * FROM admins WHERE username = 'toxibh-shubh@6969'")
     if not c.fetchone():
