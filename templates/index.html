@@ -762,6 +762,13 @@ async function sendMessage() {
     const reply = getResponse(text);
     addMessage(reply,'ai');
     speak(reply);
+    
+    fetch('/api/chatbot_logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_message: text, ai_response: reply })
+    }).catch(e => console.error(e));
+    
     document.getElementById('ai-status-text').textContent = 'ONLINE — READY';
   }, 900 + Math.random() * 500);
 }
