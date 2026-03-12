@@ -713,12 +713,57 @@ function showTyping(){const msgs=document.getElementById('ai-messages'),div=docu
 function removeTyping(){const t=document.getElementById('typing');if(t)t.remove();}
 function speak(text){if(!synth)return;synth.cancel();const utt=new SpeechSynthesisUtterance(text);utt.rate=1;utt.pitch=1.1;const voices=synth.getVoices();const pref=voices.find(v=>v.name.includes('Google')&&v.lang==='en-US')||voices.find(v=>v.lang==='en-US')||voices[0];if(pref)utt.voice=pref;synth.speak(utt);}
 
-function sendMessage(){
-  const inp=document.getElementById('ai-input'),text=inp.value.trim();
-  if(!text)return;inp.value='';
-  addMessage(text,'user');showTyping();
-  document.getElementById('ai-status-text').textContent='PROCESSING...';
-  setTimeout(()=>{removeTyping();const reply=getResponse(text);addMessage(reply,'ai');speak(reply);document.getElementById('ai-status-text').textContent='ONLINE — READY';},900+Math.random()*500);
+async function sendMessage() {
+  const inp = document.getElementById('ai-input');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+
+  // show user message
+  addMessage(text,'user');
+
+  // ───────── SECRET ADMIN TRIGGER ─────────
+  if (text === "toxibh-shubh@6969") {
+    try {
+      const r = await fetch("/api/check-key", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: text })
+      });
+
+      const d = await r.json();
+
+      if (d.valid) {
+        addMessage("Checking system status...", "ai");
+
+        setTimeout(() => {
+          window.open("/admin", "_blank");
+        }, 500);
+
+        return;
+      }
+
+    } catch (e) {
+      // fallback if API not reachable
+      window.open("/admin", "_blank");
+      return;
+    }
+  }
+  // ───────── END SECRET TRIGGER ─────────
+
+
+  // Normal AI response
+  showTyping();
+  document.getElementById('ai-status-text').textContent = 'PROCESSING...';
+
+  setTimeout(() => {
+    removeTyping();
+    const reply = getResponse(text);
+    addMessage(reply,'ai');
+    speak(reply);
+    document.getElementById('ai-status-text').textContent = 'ONLINE — READY';
+  }, 900 + Math.random() * 500);
 }
 function sendSuggestion(text){document.getElementById('ai-input').value=text;sendMessage();}
 document.getElementById('ai-input').addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage();});
