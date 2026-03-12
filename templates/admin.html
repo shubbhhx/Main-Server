@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TOXIBH // ADMIN CONTROL</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --c:#00f5ff;--m:#ff006e;--g:#00ff88;--gold:#ffd60a;
+  --dark:#010810;--d2:#020d1c;--d3:#031428;
+  --border:rgba(0,245,255,0.13);
+  --glow:0 0 18px rgba(0,245,255,0.5),0 0 50px rgba(0,245,255,0.15);
+  --glow-m:0 0 18px rgba(255,0,110,0.5);
+  --glow-g:0 0 14px rgba(0,255,136,0.4);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{background:var(--dark);color:#c8e8ff;font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;cursor:none}
+
+/* ── CURSOR ── */
+#cur{position:fixed;width:10px;height:10px;background:var(--c);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);box-shadow:var(--glow);transition:width .15s,height .15s,background .15s}
+#cur-r{position:fixed;width:32px;height:32px;border:1px solid rgba(0,245,255,.4);border-radius:50%;pointer-events:none;z-index:99998;transform:translate(-50%,-50%);transition:all .1s}
+
+/* ── GRID BG ── */
+body::before{content:'';position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(0,245,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,255,.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.045) 2px,rgba(0,0,0,.045) 4px)}
+
+/* ── LOGIN ── */
+#login{position:fixed;inset:0;z-index:1000;background:var(--dark);display:flex;align-items:center;justify-content:center}
+#login.gone{display:none}
+.lb{width:400px;background:rgba(2,13,28,.98);border:1px solid rgba(0,245,255,.2);padding:44px;clip-path:polygon(0 0,calc(100% - 22px) 0,100% 22px,100% 100%,22px 100%,0 calc(100% - 22px));box-shadow:var(--glow),0 40px 80px rgba(0,0,0,.9);position:relative;overflow:hidden}
+.lb::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--c),transparent)}
+.lb-ring{width:56px;height:56px;border:1px solid rgba(0,245,255,.15);border-top:2px solid var(--c);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 22px;box-shadow:var(--glow)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lb-logo{font-family:'Orbitron',monospace;font-size:1.5rem;font-weight:900;color:var(--c);text-shadow:var(--glow);letter-spacing:.3em;text-align:center;margin-bottom:4px}
+.lb-sub{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:rgba(0,245,255,.35);text-align:center;letter-spacing:.2em;margin-bottom:30px}
+.lf{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.ll{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.2em;color:rgba(0,245,255,.5)}
+.li{background:rgba(0,245,255,.04);border:1px solid rgba(0,245,255,.13);color:#c8e8ff;font-family:'Share Tech Mono',monospace;font-size:.82rem;padding:11px 13px;outline:none;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);transition:border-color .3s;width:100%}
+.li:focus{border-color:var(--c)}
+.li::placeholder{color:rgba(200,232,255,.2)}
+.l-btn{width:100%;padding:13px;font-family:'Orbitron',monospace;font-size:.68rem;font-weight:700;letter-spacing:.2em;background:var(--c);color:#010810;border:none;cursor:pointer;clip-path:polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%);margin-top:6px;transition:all .3s;position:relative;overflow:hidden}
+.l-btn:hover{background:#00ffff;box-shadow:var(--glow)}
+.l-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:translateX(-100%);transition:.4s}
+.l-btn:hover::before{transform:translateX(100%)}
+.l-err{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--m);text-align:center;padding:7px;border:1px solid rgba(255,0,110,.28);background:rgba(255,0,110,.04);display:none;margin-top:8px}
+.l-err.show{display:block}
+
+/* ── LAYOUT ── */
+#app{display:none;min-height:100vh;position:relative;z-index:1}
+#app.show{display:flex}
+
+/* ── SIDEBAR ── */
+#sb{width:210px;min-height:100vh;background:rgba(1,9,20,.97);border-right:1px solid rgba(0,245,255,.07);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sb-top{padding:20px 18px 16px;border-bottom:1px solid rgba(0,245,255,.07)}
+.sb-logo{font-family:'Orbitron',monospace;font-size:.95rem;font-weight:900;color:var(--c);letter-spacing:.2em;text-shadow:var(--glow)}
+.sb-ver{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:rgba(0,245,255,.3);letter-spacing:.12em;margin-top:2px}
+.sb-nav{flex:1;padding:12px 0;overflow-y:auto}
+.sb-grp{padding:7px 14px 3px;font-family:'Share Tech Mono',monospace;font-size:.5rem;letter-spacing:.3em;color:rgba(200,232,255,.22)}
+.si{display:flex;align-items:center;gap:9px;padding:10px 18px;font-family:'Share Tech Mono',monospace;font-size:.65rem;color:rgba(200,232,255,.45);cursor:pointer;transition:all .22s;border-left:2px solid transparent;position:relative}
+.si:hover{color:var(--c);background:rgba(0,245,255,.035)}
+.si.on{color:var(--c);background:rgba(0,245,255,.065);border-left-color:var(--c)}
+.si-ico{font-size:.95rem;width:18px;text-align:center;flex-shrink:0}
+.sib{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:var(--m);color:#fff;font-size:.48rem;padding:1px 5px;min-width:16px;text-align:center;font-family:'Share Tech Mono',monospace}
+.sb-bot{padding:14px 18px;border-top:1px solid rgba(0,245,255,.07)}
+.sb-u{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:rgba(0,245,255,.35);margin-bottom:7px}
+.lo-btn{width:100%;padding:8px;font-family:'Orbitron',monospace;font-size:.56rem;letter-spacing:.12em;color:var(--m);background:transparent;border:1px solid rgba(255,0,110,.22);cursor:pointer;clip-path:polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%);transition:all .3s}
+.lo-btn:hover{background:rgba(255,0,110,.09);border-color:var(--m)}
+
+/* ── CONTENT ── */
+#main{margin-left:210px;flex:1;padding:28px;min-height:100vh}
+.pg{display:none}
+.pg.on{display:block}
+
+/* ── TOPBAR ── */
+.tb{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+.tb-title{font-family:'Orbitron',monospace;font-size:1.3rem;font-weight:900;color:#fff}
+.tb-title em{color:var(--c);font-style:normal}
+.tb-r{display:flex;align-items:center;gap:10px}
+.tb-online{display:flex;align-items:center;gap:5px;font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--g)}
+.tb-dot{width:5px;height:5px;background:var(--g);border-radius:50%;animation:p 2s infinite}
+@keyframes p{0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,.5)}70%{box-shadow:0 0 0 7px rgba(0,255,136,0)}}
+.tb-clk{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(200,232,255,.3)}
+
+/* ── STAT CARDS ── */
+.sc-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:13px;margin-bottom:22px}
+.sc{padding:18px;border:1px solid var(--border);background:rgba(0,245,255,.02);clip-path:polygon(0 0,calc(100% - 11px) 0,100% 11px,100% 100%,11px 100%,0 calc(100% - 11px));transition:all .3s;cursor:default}
+.sc:hover{border-color:var(--c);box-shadow:var(--glow)}
+.sc.red:hover{border-color:var(--m);box-shadow:var(--glow-m)}
+.sc.grn:hover{border-color:var(--g);box-shadow:var(--glow-g)}
+.sc-ico{font-size:1.25rem;margin-bottom:6px}
+.sc-v{font-family:'Orbitron',monospace;font-size:1.7rem;font-weight:900;color:var(--c);line-height:1}
+.sc.red .sc-v{color:var(--m)}.sc.grn .sc-v{color:var(--g)}
+.sc-l{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:rgba(200,232,255,.34);margin-top:3px;letter-spacing:.08em}
+
+/* ── PANEL ── */
+.pnl{background:rgba(2,13,28,.78);border:1px solid rgba(0,245,255,.09);margin-bottom:18px;overflow:hidden}
+.pnl-h{padding:13px 18px;border-bottom:1px solid rgba(0,245,255,.07);display:flex;align-items:center;justify-content:space-between;background:rgba(0,245,255,.022)}
+.pnl-hl{font-family:'Orbitron',monospace;font-size:.73rem;color:var(--c);letter-spacing:.08em}
+.pnl-b{padding:18px}
+
+/* ── CHART ── */
+.chart{height:110px;display:flex;align-items:flex-end;gap:3px}
+.cb-w{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%}
+.cb{width:100%;background:linear-gradient(180deg,var(--c),rgba(0,245,255,.25));border-radius:1px 1px 0 0;min-height:2px;transition:height .5s ease}
+.cb:hover{background:linear-gradient(180deg,#00ffff,var(--c))}
+.cl{font-family:'Share Tech Mono',monospace;font-size:.48rem;color:rgba(200,232,255,.3);white-space:nowrap}
+
+/* ── TABLE ── */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-family:'Share Tech Mono',monospace;font-size:.56rem;color:rgba(0,245,255,.45);padding:9px 11px;text-align:left;letter-spacing:.08em;border-bottom:1px solid rgba(0,245,255,.07);text-transform:uppercase}
+.tbl td{font-family:'Share Tech Mono',monospace;font-size:.65rem;padding:9px 11px;border-bottom:1px solid rgba(0,245,255,.035);color:rgba(200,232,255,.65);vertical-align:middle}
+.tbl tr:hover td{background:rgba(0,245,255,.018)}
+.tbl tr.new td{color:#fff}
+.bdg{display:inline-block;padding:2px 7px;font-family:'Share Tech Mono',monospace;font-size:.5rem;letter-spacing:.04em}
+.bdg-new{background:rgba(255,214,10,.12);border:1px solid rgba(255,214,10,.28);color:var(--gold)}
+.bdg-read{background:rgba(200,232,255,.05);border:1px solid rgba(200,232,255,.09);color:rgba(200,232,255,.35)}
+.bdg-photo{background:rgba(0,245,255,.09);border:1px solid rgba(0,245,255,.2);color:var(--c)}
+.bdg-pdf{background:rgba(255,0,110,.08);border:1px solid rgba(255,0,110,.18);color:var(--m)}
+.act{display:flex;gap:5px}
+.ta{padding:3px 7px;font-family:'Share Tech Mono',monospace;font-size:.52rem;cursor:pointer;border:none;transition:all .2s;letter-spacing:.04em}
+.ta-v{background:rgba(0,245,255,.09);color:var(--c);border:1px solid rgba(0,245,255,.18)}
+.ta-v:hover{background:rgba(0,245,255,.18)}
+.ta-d{background:rgba(255,0,110,.08);color:var(--m);border:1px solid rgba(255,0,110,.18)}
+.ta-d:hover{background:rgba(255,0,110,.22)}
+.ta-c{background:rgba(0,255,136,.06);color:var(--g);border:1px solid rgba(0,255,136,.18)}
+.ta-c:hover{background:rgba(0,255,136,.16)}
+
+/* ── NOTES ── */
+.ng{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.nc{padding:16px;border:1px solid rgba(0,245,255,.11);background:rgba(0,11,24,.7);position:relative;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%);transition:all .3s}
+.nc:hover{border-color:rgba(0,245,255,.28);transform:translateY(-2px)}
+.nc.mc{border-color:rgba(255,0,110,.22)}.nc.gg{border-color:rgba(0,255,136,.22)}.nc.gc{border-color:rgba(255,214,10,.22)}
+.nt{font-family:'Orbitron',monospace;font-size:.68rem;color:var(--c);margin-bottom:7px;font-weight:700}
+.nc.mc .nt{color:var(--m)}.nc.gg .nt{color:var(--g)}.nc.gc .nt{color:var(--gold)}
+.ncont{font-size:.8rem;color:rgba(200,232,255,.6);line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:110px;overflow:hidden}
+.ntm{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:rgba(200,232,255,.26);margin-top:8px}
+.na{display:flex;gap:4px;margin-top:8px}
+
+/* ── FORMS ── */
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.fr.full{grid-template-columns:1fr}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.18em;color:rgba(0,245,255,.45);text-transform:uppercase}
+.fi,.fsel,.fta{background:rgba(0,245,255,.028);border:1px solid rgba(0,245,255,.11);color:#c8e8ff;font-family:'Exo 2',sans-serif;font-size:.82rem;padding:9px 11px;outline:none;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);transition:border-color .3s;width:100%}
+.fi:focus,.fsel:focus,.fta:focus{border-color:var(--c)}
+.fi::placeholder,.fta::placeholder{color:rgba(200,232,255,.18)}
+.fsel option{background:#020d1c;color:#c8e8ff}
+.fta{resize:vertical;min-height:90px}
+.btn-s{padding:9px 20px;font-family:'Orbitron',monospace;font-size:.62rem;font-weight:700;letter-spacing:.14em;background:var(--c);color:#010810;border:none;cursor:pointer;clip-path:polygon(7px 0,100% 0,calc(100% - 7px) 100%,0 100%);transition:all .3s}
+.btn-s:hover{background:#00ffff;box-shadow:var(--glow)}
+.btn-s.m{background:var(--m);color:#fff}
+.btn-s.m:hover{box-shadow:var(--glow-m)}
+
+/* ── PASSWORDS ── */
+.pwc{padding:14px;border:1px solid rgba(0,245,255,.09);background:rgba(0,7,18,.6);margin-bottom:9px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px));transition:border-color .3s}
+.pwc:hover{border-color:rgba(0,245,255,.25)}
+.pw-site{font-family:'Orbitron',monospace;font-size:.73rem;color:var(--c);margin-bottom:2px}
+.pw-usr{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(200,232,255,.45)}
+.pw-pw{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(200,232,255,.3);margin-top:2px}
+.pw-cat{display:inline-block;padding:1px 6px;font-family:'Share Tech Mono',monospace;font-size:.5rem;border:1px solid rgba(0,245,255,.18);color:rgba(0,245,255,.55);margin-top:3px}
+
+/* ── GALLERY ── */
+.gg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.gi{border:1px solid rgba(0,245,255,.09);background:rgba(0,7,18,.7);overflow:hidden;position:relative;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px));transition:all .3s;cursor:pointer}
+.gi:hover{border-color:var(--c);transform:scale(1.02);box-shadow:var(--glow)}
+.gi-img{width:100%;height:110px;object-fit:cover;display:block}
+.gi-pdf{width:100%;height:110px;display:flex;align-items:center;justify-content:center;font-size:2.2rem;background:rgba(255,0,110,.05)}
+.gi-info{padding:7px 9px}
+.gi-name{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:rgba(200,232,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gi-sz{font-family:'Share Tech Mono',monospace;font-size:.5rem;color:rgba(200,232,255,.28);margin-top:1px}
+.gi-del{position:absolute;top:5px;right:5px;width:22px;height:22px;background:rgba(255,0,110,.82);border:none;color:#fff;cursor:pointer;font-size:.65rem;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s}
+.gi:hover .gi-del{opacity:1}
+
+/* ── UPLOAD ── */
+.upz{border:2px dashed rgba(0,245,255,.18);padding:36px;text-align:center;cursor:pointer;transition:all .3s;background:rgba(0,245,255,.008);margin-bottom:18px}
+.upz:hover,.upz.drag{border-color:var(--c);background:rgba(0,245,255,.035)}
+.upz-ico{font-size:2.2rem;margin-bottom:10px}
+.upz p{font-family:'Share Tech Mono',monospace;font-size:.64rem;color:rgba(200,232,255,.4);line-height:1.7}
+
+/* ── VISITOR ROW ── */
+.vr{display:flex;align-items:flex-start;gap:9px;padding:11px;border-bottom:1px solid rgba(0,245,255,.035)}
+.vr:last-child{border:none}
+.vn{font-family:'Orbitron',monospace;font-size:.6rem;color:rgba(0,245,255,.28);width:22px;flex-shrink:0;margin-top:1px}
+.vm{flex:1;min-width:0}
+.vip{font-family:'Share Tech Mono',monospace;font-size:.66rem;color:var(--c)}
+.vua{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:rgba(200,232,255,.34);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vrf{font-family:'Share Tech Mono',monospace;font-size:.54rem;color:rgba(200,232,255,.26);margin-top:1px}
+.vt{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:rgba(200,232,255,.26);flex-shrink:0;white-space:nowrap}
+
+/* ── SEARCH ── */
+.srch{display:flex;gap:8px;margin-bottom:14px}
+.si2{flex:1;background:rgba(0,245,255,.03);border:1px solid rgba(0,245,255,.11);color:#c8e8ff;font-family:'Share Tech Mono',monospace;font-size:.68rem;padding:8px 12px;outline:none;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);transition:border-color .3s}
+.si2:focus{border-color:var(--c)}
+.si2::placeholder{color:rgba(200,232,255,.18)}
+
+/* ── MODAL ── */
+#mo{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:2000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(5px)}
+#mo.show{display:flex}
+.mb{width:480px;max-width:94vw;background:rgba(2,13,28,.99);border:1px solid rgba(0,245,255,.2);padding:28px;clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));box-shadow:var(--glow),0 28px 70px rgba(0,0,0,.9);max-height:88vh;overflow-y:auto;position:relative}
+.mb h3{font-family:'Orbitron',monospace;font-size:.92rem;color:var(--c);margin-bottom:18px}
+.mc-btn{position:absolute;top:12px;right:12px;background:none;border:none;color:rgba(200,232,255,.35);cursor:pointer;font-size:1.1rem}
+.mc-btn:hover{color:var(--m)}
+.m-act{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(16px);background:rgba(2,13,28,.97);border:1px solid var(--c);padding:10px 22px;font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--c);z-index:9999;opacity:0;transition:all .28s;pointer-events:none;clip-path:polygon(7px 0,100% 0,calc(100% - 7px) 100%,0 100%)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{border-color:var(--g);color:var(--g)}
+#toast.err{border-color:var(--m);color:var(--m)}
+
+/* ── PROG BAR ── */
+.prog-w{margin-bottom:12px;display:none}
+.prog-t{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--c);margin-bottom:5px}
+.prog-b{height:2px;background:rgba(0,245,255,.1)}
+.prog-f{height:100%;background:var(--c);width:0;transition:width .3s}
+
+/* ── SCROLL ── */
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-thumb{background:rgba(0,245,255,.2);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,245,255,.38)}
+
+@media(max-width:700px){#sb{transform:translateX(-100%)}#sb.open{transform:translateX(0)}#main{margin-left:0}.fr{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="cur"></div><div id="cur-r"></div>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="lb">
+    <div class="lb-ring"></div>
+    <div class="lb-logo">TOXIBH</div>
+    <div class="lb-sub">ADMIN CONTROL CENTER · AUTHORIZED ONLY</div>
+    <div class="lf"><label class="ll">ADMIN ID</label><input class="li" id="l-u" type="text" placeholder="Admin ID..." autocomplete="off"></div>
+    <div class="lf"><label class="ll">PASSWORD</label><input class="li" id="l-p" type="password" placeholder="Password..."></div>
+    <div class="l-err" id="l-err">⚠ INVALID CREDENTIALS — ACCESS DENIED</div>
+    <button class="l-btn" onclick="doLogin()">⚡ ACCESS SYSTEM</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <nav id="sb">
+    <div class="sb-top">
+      <div class="sb-logo">TOXIBH</div>
+      <div class="sb-ver">ADMIN CONTROL CENTER</div>
+    </div>
+    <div class="sb-nav">
+      <div class="sb-grp">MAIN</div>
+      <div class="si on" onclick="nav('dash')"><span class="si-ico">📊</span>DASHBOARD</div>
+      <div class="si" onclick="nav('vis')"><span class="si-ico">👁</span>VISITORS<span class="sib" id="b-vis">0</span></div>
+      <div class="si" onclick="nav('msg')"><span class="si-ico">✉️</span>MESSAGES<span class="sib" id="b-msg"></span></div>
+      <div class="sb-grp">TOOLS</div>
+      <div class="si" onclick="nav('notes')"><span class="si-ico">📝</span>NOTEPAD</div>
+      <div class="si" onclick="nav('pw')"><span class="si-ico">🔐</span>PASSWORDS</div>
+      <div class="sb-grp">VAULT</div>
+      <div class="si" onclick="nav('photos')"><span class="si-ico">🖼️</span>PHOTO VAULT</div>
+      <div class="si" onclick="nav('pdfs')"><span class="si-ico">📄</span>PDF VAULT</div>
+    </div>
+    <div class="sb-bot">
+      <div class="sb-u" id="sb-u">SESSION ACTIVE</div>
+      <button class="lo-btn" onclick="doLogout()">⏏ LOGOUT</button>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <main id="main">
+
+    <!-- DASHBOARD -->
+    <div class="pg on" id="pg-dash">
+      <div class="tb">
+        <div class="tb-title">CONTROL <em>CENTER</em></div>
+        <div class="tb-r"><div class="tb-online"><div class="tb-dot"></div>ONLINE</div><div class="tb-clk" id="clk"></div></div>
+      </div>
+      <div class="sc-row">
+        <div class="sc"><div class="sc-ico">👁</div><div class="sc-v" id="sv">—</div><div class="sc-l">TOTAL VISITORS</div></div>
+        <div class="sc grn"><div class="sc-ico">⚡</div><div class="sc-v" id="st">—</div><div class="sc-l">TODAY</div></div>
+        <div class="sc red"><div class="sc-ico">📬</div><div class="sc-v" id="su">—</div><div class="sc-l">UNREAD MSGS</div></div>
+        <div class="sc"><div class="sc-ico">📝</div><div class="sc-v" id="sn">—</div><div class="sc-l">NOTES</div></div>
+        <div class="sc"><div class="sc-ico">🔐</div><div class="sc-v" id="spw">—</div><div class="sc-l">PASSWORDS</div></div>
+        <div class="sc"><div class="sc-ico">🗂️</div><div class="sc-v" id="sf">—</div><div class="sc-l">FILES</div></div>
+      </div>
+      <div class="pnl">
+        <div class="pnl-h"><span class="pnl-hl">📈 VISITOR ACTIVITY — LAST 7 DAYS</span></div>
+        <div class="pnl-b"><div class="chart" id="d-chart"></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="pnl"><div class="pnl-h"><span class="pnl-hl">✉️ RECENT MESSAGES</span></div><div id="d-msgs" style="padding:0"></div></div>
+        <div class="pnl"><div class="pnl-h"><span class="pnl-hl">👁 RECENT VISITORS</span></div><div id="d-vis" style="padding:0"></div></div>
+      </div>
+    </div>
+
+    <!-- VISITORS -->
+    <div class="pg" id="pg-vis">
+      <div class="tb"><div class="tb-title">VISITOR <em>LOGS</em></div><div class="tb-r"><button class="btn-s m" onclick="clrVis()">🗑 CLEAR ALL</button></div></div>
+      <div class="pnl">
+        <div class="pnl-h"><span class="pnl-hl" id="vc-lbl">LOADING...</span></div>
+        <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>IP</th><th>BROWSER / DEVICE</th><th>REFERRER</th><th>TIME</th></tr></thead><tbody id="v-tbody"></tbody></table></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap" id="v-pag"></div>
+    </div>
+
+    <!-- MESSAGES -->
+    <div class="pg" id="pg-msg">
+      <div class="tb"><div class="tb-title">CONTACT <em>MESSAGES</em></div></div>
+      <div class="pnl">
+        <div class="pnl-h"><span class="pnl-hl" id="mc-lbl">LOADING...</span></div>
+        <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>STATUS</th><th>FROM</th><th>EMAIL</th><th>PREVIEW</th><th>TIME</th><th>ACTIONS</th></tr></thead><tbody id="m-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="pg" id="pg-notes">
+      <div class="tb"><div class="tb-title">SECURE <em>NOTEPAD</em></div></div>
+      <div class="pnl" style="margin-bottom:18px">
+        <div class="pnl-h"><span class="pnl-hl">+ NEW NOTE</span></div>
+        <div class="pnl-b">
+          <div class="fr"><div class="fg"><label class="fl">TITLE</label><input class="fi" id="n-t" placeholder="Note title..."></div><div class="fg"><label class="fl">COLOR</label><select class="fsel" id="n-c"><option value="cyan">Cyan</option><option value="magenta">Magenta</option><option value="green">Green</option><option value="gold">Gold</option></select></div></div>
+          <div class="fr full"><div class="fg"><label class="fl">CONTENT</label><textarea class="fta" id="n-b" placeholder="Write here..." style="min-height:130px"></textarea></div></div>
+          <button class="btn-s" onclick="addNote()">SAVE ⚡</button>
+        </div>
+      </div>
+      <div class="ng" id="n-grid"></div>
+    </div>
+
+    <!-- PASSWORDS -->
+    <div class="pg" id="pg-pw">
+      <div class="tb"><div class="tb-title">PASSWORD <em>VAULT</em></div></div>
+      <div class="pnl" style="margin-bottom:18px">
+        <div class="pnl-h"><span class="pnl-hl">+ ADD PASSWORD</span></div>
+        <div class="pnl-b">
+          <div class="fr"><div class="fg"><label class="fl">SITE / APP</label><input class="fi" id="pw-s" placeholder="google.com"></div><div class="fg"><label class="fl">USERNAME</label><input class="fi" id="pw-u" placeholder="user@email.com"></div></div>
+          <div class="fr"><div class="fg"><label class="fl">PASSWORD</label><input class="fi" id="pw-p" type="text" placeholder="Password..."></div><div class="fg"><label class="fl">CATEGORY</label><select class="fsel" id="pw-c"><option>General</option><option>Social</option><option>Work</option><option>Finance</option><option>Email</option><option>Other</option></select></div></div>
+          <div class="fr full"><div class="fg"><label class="fl">NOTES</label><input class="fi" id="pw-n" placeholder="Optional notes..."></div></div>
+          <button class="btn-s" onclick="addPw()">STORE 🔐</button>
+        </div>
+      </div>
+      <div class="srch"><input class="si2" id="pw-srch" placeholder="Search passwords..." oninput="renderPw()"></div>
+      <div id="pw-list"></div>
+    </div>
+
+    <!-- PHOTOS -->
+    <div class="pg" id="pg-photos">
+      <div class="tb"><div class="tb-title">PHOTO <em>VAULT</em></div></div>
+      <div class="upz" onclick="document.getElementById('fi-ph').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="drop(event,'photo')">
+        <input type="file" id="fi-ph" accept="image/*" multiple onchange="uploadF(this.files,'photo')" style="display:none">
+        <div class="upz-ico">🖼️</div>
+        <p>CLICK OR DRAG &amp; DROP IMAGES<br><span style="color:rgba(200,232,255,.22)">JPG · PNG · GIF · WEBP · MAX 100MB</span></p>
+      </div>
+      <div class="prog-w" id="ph-prog"><div class="prog-t" id="ph-prog-t">UPLOADING...</div><div class="prog-b"><div class="prog-f" id="ph-prog-f"></div></div></div>
+      <div class="gg-grid" id="ph-grid"></div>
+    </div>
+
+    <!-- PDFS -->
+    <div class="pg" id="pg-pdfs">
+      <div class="tb"><div class="tb-title">PDF <em>VAULT</em></div></div>
+      <div class="upz" onclick="document.getElementById('fi-pdf').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="drop(event,'pdf')">
+        <input type="file" id="fi-pdf" accept=".pdf,application/pdf" multiple onchange="uploadF(this.files,'pdf')" style="display:none">
+        <div class="upz-ico">📄</div>
+        <p>CLICK OR DRAG &amp; DROP PDF FILES<br><span style="color:rgba(200,232,255,.22)">PDF ONLY · MAX 100MB EACH</span></p>
+      </div>
+      <div class="gg-grid" id="pdf-grid"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODAL -->
+<div id="mo" onclick="if(event.target===this)closeMo()">
+  <div class="mb"><button class="mc-btn" onclick="closeMo()">✕</button><div id="mc"></div></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── CURSOR ──
+const cur=document.getElementById('cur'),curR=document.getElementById('cur-r');
+let cx=0,cy=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{cx=e.clientX;cy=e.clientY;cur.style.left=cx+'px';cur.style.top=cy+'px';});
+(function ac(){rx+=(cx-rx)*.13;ry+=(cy-ry)*.13;curR.style.left=rx+'px';curR.style.top=ry+'px';requestAnimationFrame(ac)})();
+document.querySelectorAll('button,a,.si,.gi,.pwc,.nc').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{cur.style.width='16px';cur.style.height='16px';cur.style.background='var(--m)'});
+  el.addEventListener('mouseleave',()=>{cur.style.width='10px';cur.style.height='10px';cur.style.background='var(--c)'});
+});
+
+// ── CLOCK ──
+setInterval(()=>{const e=document.getElementById('clk');if(e)e.textContent=new Date().toLocaleTimeString('en-GB',{hour12:false})+' · '+new Date().toLocaleDateString('en-GB')},1000);
+
+// ── TOAST ──
+let tt;
+function toast(m,t=''){const el=document.getElementById('toast');el.textContent=m;el.className='show '+(t||'');clearTimeout(tt);tt=setTimeout(()=>el.className='',2800)}
+
+// ── MODAL ──
+function openMo(h){document.getElementById('mc').innerHTML=h;document.getElementById('mo').classList.add('show')}
+function closeMo(){document.getElementById('mo').classList.remove('show')}
+
+// ── API ──
+async function api(m,path,body){
+  const o={method:m,credentials:'include',headers:{}};
+  if(body&&!(body instanceof FormData)){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body);}
+  else if(body)o.body=body;
+  const r=await fetch(path,o);
+  return r.json();
+}
+
+// ── AUTH ──
+async function checkAuth(){
+  const r=await api('GET','/api/auth-status');
+  if(r.admin)showApp();
+}
+async function doLogin(){
+  const u=document.getElementById('l-u').value.trim();
+  const p=document.getElementById('l-p').value;
+  document.getElementById('l-err').classList.remove('show');
+  const r=await api('POST','/api/login',{username:u,password:p});
+  if(r.success)showApp();
+  else document.getElementById('l-err').classList.add('show');
+}
+['l-u','l-p'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()}));
+function showApp(){document.getElementById('login').classList.add('gone');document.getElementById('app').classList.add('show');loadDash();}
+async function doLogout(){await api('POST','/api/logout');location.reload()}
+
+// ── NAV ──
+function nav(pg){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.si').forEach(s=>s.classList.remove('on'));
+  document.getElementById('pg-'+pg).classList.add('on');
+  document.querySelectorAll('.si').forEach(s=>{if((s.getAttribute('onclick')||'').includes("'"+pg+"'"))s.classList.add('on')});
+  if(pg==='dash')loadDash();
+  else if(pg==='vis')loadVis();
+  else if(pg==='msg')loadMsg();
+  else if(pg==='notes')loadNotes();
+  else if(pg==='pw'){loadPwData();}
+  else if(pg==='photos')loadFiles('photo');
+  else if(pg==='pdfs')loadFiles('pdf');
+}
+
+// ── DASHBOARD ──
+async function loadDash(){
+  const d=await api('GET','/api/stats');
+  document.getElementById('sv').textContent=d.totalVisitors;
+  document.getElementById('st').textContent=d.todayVisitors;
+  document.getElementById('su').textContent=d.unreadMessages;
+  document.getElementById('sn').textContent=d.totalNotes;
+  document.getElementById('spw').textContent=d.totalPasswords;
+  document.getElementById('sf').textContent=d.totalFiles;
+  document.getElementById('b-vis').textContent=d.totalVisitors;
+  document.getElementById('b-msg').textContent=d.unreadMessages||'';
+  // Chart
+  const ch=document.getElementById('d-chart'),ent=Object.entries(d.visitorChart);
+  const mx=Math.max(...ent.map(e=>e[1]),1);
+  ch.innerHTML=ent.map(([l,v])=>`<div class="cb-w"><div class="cb" title="${v}" style="height:${Math.max((v/mx)*100,2)}%"></div><div class="cl">${l}</div></div>`).join('');
+  // Recent msgs
+  const msgs=await api('GET','/api/messages');
+  document.getElementById('d-msgs').innerHTML=msgs.slice(0,5).map(m=>`<div class="vr"><div class="vm"><div class="vip">${m.name} &lt;${m.email}&gt;</div><div class="vua">${m.message.substring(0,55)}${m.message.length>55?'...':''}</div></div><div class="vt">${ft(m.time)}</div></div>`).join('')||empty('NO MESSAGES YET');
+  // Recent visitors
+  const vis=await api('GET','/api/visitors?limit=5');
+  document.getElementById('d-vis').innerHTML=(vis.data||[]).map((v,i)=>`<div class="vr"><div class="vn">${i+1}</div><div class="vm"><div class="vip">${v.ip}</div><div class="vua">${(v.user_agent||'').substring(0,50)}...</div></div><div class="vt">${ft(v.time)}</div></div>`).join('')||empty('NO VISITORS YET');
+}
+
+// ── VISITORS ──
+let vp=1;
+async function loadVis(p=1){
+  vp=p;
+  const d=await api('GET',`/api/visitors?page=${p}&limit=25`);
+  document.getElementById('vc-lbl').textContent=`${d.total} TOTAL VISITORS`;
+  document.getElementById('v-tbody').innerHTML=(d.data||[]).map((v,i)=>`<tr><td>${(p-1)*25+i+1}</td><td style="color:var(--c)">${v.ip}</td><td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.user_agent||''}</td><td>${v.referrer||'direct'}</td><td>${ft(v.time)}</td></tr>`).join()||`<tr><td colspan="5" style="text-align:center;color:rgba(200,232,255,.28);padding:22px">NO VISITORS YET</td></tr>`;
+  const tp=Math.ceil(d.total/25);
+  document.getElementById('v-pag').innerHTML=Array.from({length:tp},(_,i)=>`<button class="btn-s${i+1===p?'':' m'}" onclick="loadVis(${i+1})" style="padding:5px 12px;font-size:.58rem">${i+1}</button>`).join('');
+}
+async function clrVis(){if(!confirm('Clear all visitor logs?'))return;await api('DELETE','/api/visitors');toast('Cleared ✓','ok');loadVis()}
+
+// ── MESSAGES ──
+async function loadMsg(){
+  const msgs=await api('GET','/api/messages');
+  document.getElementById('mc-lbl').textContent=`${msgs.length} MESSAGES`;
+  document.getElementById('m-tbody').innerHTML=msgs.map(m=>`<tr class="${m.read?'':'new'}"><td><span class="bdg ${m.read?'bdg-read':'bdg-new'}">${m.read?'READ':'NEW'}</span></td><td>${m.name}</td><td style="color:var(--c)">${m.email}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.message.substring(0,45)}...</td><td>${ft(m.time)}</td><td><div class="act"><button class="ta ta-v" onclick="viewMsg('${m.id}')">VIEW</button><button class="ta ta-d" onclick="delMsg('${m.id}')">DEL</button></div></td></tr>`).join()||`<tr><td colspan="6" style="text-align:center;color:rgba(200,232,255,.28);padding:22px">NO MESSAGES YET</td></tr>`;
+}
+async function viewMsg(id){
+  const msgs=await api('GET','/api/messages');
+  const m=msgs.find(x=>x.id===id);if(!m)return;
+  await api('PATCH',`/api/messages/${id}/read`);
+  openMo(`<h3>✉️ FROM: ${m.name.toUpperCase()}</h3>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(0,245,255,.45);margin-bottom:14px">📧 ${m.email} · 🌐 ${m.ip} · 🕐 ${ft(m.time)}</div>
+    <div style="background:rgba(0,245,255,.02);border:1px solid rgba(0,245,255,.1);padding:16px;font-size:.87rem;color:rgba(200,232,255,.8);line-height:1.75;white-space:pre-wrap">${m.message}</div>
+    <div class="m-act"><a href="mailto:${m.email}" class="btn-s" style="text-decoration:none">REPLY</a><button class="btn-s m" onclick="delMsg('${m.id}');closeMo()">DELETE</button></div>`);
+  loadMsg();
+}
+async function delMsg(id){await api('DELETE',`/api/messages/${id}`);toast('Deleted','ok');loadMsg()}
+
+// ── NOTES ──
+async function loadNotes(){
+  const ns=await api('GET','/api/notes');
+  const colorMap={cyan:'',magenta:'mc',green:'gg',gold:'gc'};
+  document.getElementById('n-grid').innerHTML=ns.map(n=>`
+    <div class="nc ${colorMap[n.color]||''}">
+      <div class="nt">${n.title}</div>
+      <div class="ncont">${n.content}</div>
+      <div class="ntm">${ft(n.updated||n.time)}</div>
+      <div class="na"><button class="ta ta-v" onclick="editNote('${n.id}')">EDIT</button><button class="ta ta-d" onclick="delNote('${n.id}')">DEL</button></div>
+    </div>`).join('')||`<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:rgba(200,232,255,.28);padding:18px">NO NOTES YET</div>`;
+}
+async function addNote(){
+  const t=document.getElementById('n-t').value.trim(),b=document.getElementById('n-b').value.trim(),c=document.getElementById('n-c').value;
+  if(!b){toast('Content required','err');return}
+  await api('POST','/api/notes',{title:t,content:b,color:c});
+  document.getElementById('n-t').value='';document.getElementById('n-b').value='';
+  toast('Note saved ✓','ok');loadNotes();
+}
+async function editNote(id){
+  const ns=await api('GET','/api/notes'),n=ns.find(x=>x.id===id);if(!n)return;
+  openMo(`<h3>📝 EDIT NOTE</h3>
+    <div class="fr"><div class="fg"><label class="fl">TITLE</label><input class="fi" id="en-t" value="${n.title}"></div><div class="fg"><label class="fl">COLOR</label><select class="fsel" id="en-c"><option value="cyan" ${n.color==='cyan'?'selected':''}>Cyan</option><option value="magenta" ${n.color==='magenta'?'selected':''}>Magenta</option><option value="green" ${n.color==='green'?'selected':''}>Green</option><option value="gold" ${n.color==='gold'?'selected':''}>Gold</option></select></div></div>
+    <div class="fr full"><div class="fg"><label class="fl">CONTENT</label><textarea class="fta" id="en-b" style="min-height:150px">${n.content}</textarea></div></div>
+    <div class="m-act"><button class="btn-s" onclick="saveNote('${id}')">SAVE</button></div>`);
+}
+async function saveNote(id){
+  await api('PUT',`/api/notes/${id}`,{title:document.getElementById('en-t').value,content:document.getElementById('en-b').value,color:document.getElementById('en-c').value});
+  toast('Updated ✓','ok');closeMo();loadNotes();
+}
+async function delNote(id){if(!confirm('Delete?'))return;await api('DELETE',`/api/notes/${id}`);toast('Deleted','ok');loadNotes()}
+
+// ── PASSWORDS ──
+let allPw=[];
+async function loadPwData(){allPw=await api('GET','/api/passwords');renderPw()}
+function renderPw(){
+  const q=(document.getElementById('pw-srch')?.value||'').toLowerCase();
+  const fl=allPw.filter(p=>`${p.site}${p.username}${p.category}`.toLowerCase().includes(q));
+  document.getElementById('pw-list').innerHTML=fl.map(p=>`
+    <div class="pwc">
+      <div>
+        <div class="pw-site">${p.site}</div>
+        <div class="pw-usr">👤 ${p.username||'—'}</div>
+        <div class="pw-pw" id="ppw-${p.id}">🔒 ••••••••</div>
+        <div class="pw-cat">${p.category}</div>
+        ${p.notes?`<div style="font-family:'Share Tech Mono',monospace;font-size:.54rem;color:rgba(200,232,255,.28);margin-top:3px">${p.notes}</div>`:''}
+      </div>
+      <div class="act" style="flex-direction:column">
+        <button class="ta ta-v" onclick="togPw('${p.id}','${p.password.replace(/'/g,"\\'")}')">👁</button>
+        <button class="ta ta-c" onclick="cpTx('${p.password.replace(/'/g,"\\'")}')">📋</button>
+        <button class="ta ta-d" onclick="delPw('${p.id}')">🗑</button>
+      </div>
+    </div>`).join('')||`<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:rgba(200,232,255,.28);text-align:center;padding:20px">VAULT EMPTY</div>`;
+}
+function togPw(id,pw){const e=document.getElementById('ppw-'+id);if(e)e.textContent=e.textContent.includes('••')?`🔓 ${pw}`:'🔒 ••••••••'}
+function cpTx(t){navigator.clipboard.writeText(t).then(()=>toast('Copied ✓','ok'))}
+async function addPw(){
+  const s=document.getElementById('pw-s').value.trim(),u=document.getElementById('pw-u').value.trim(),p=document.getElementById('pw-p').value.trim(),c=document.getElementById('pw-c').value,n=document.getElementById('pw-n').value.trim();
+  if(!s||!p){toast('Site and password required','err');return}
+  const r=await api('POST','/api/passwords',{site:s,username:u,password:p,category:c,notes:n});
+  allPw.unshift(r);
+  ['pw-s','pw-u','pw-p','pw-n'].forEach(id=>document.getElementById(id).value='');
+  toast('Stored 🔐','ok');renderPw();
+}
+async function delPw(id){if(!confirm('Delete?'))return;await api('DELETE',`/api/passwords/${id}`);allPw=allPw.filter(p=>p.id!==id);toast('Deleted','ok');renderPw()}
+
+// ── FILES ──
+async function loadFiles(type){
+  const files=await api('GET',`/api/files?type=${type}`);
+  const grid=document.getElementById(type==='photo'?'ph-grid':'pdf-grid');
+  grid.innerHTML=files.map(f=>type==='photo'
+    ?`<div class="gi"><img class="gi-img" src="/${f.path}" alt="${f.originalName}" onclick="openMo('<img src=\\'/${f.path}\\' style=\\'max-width:100%\\'>');event.stopPropagation()"><div class="gi-info"><div class="gi-name">${f.originalName}</div><div class="gi-sz">${fsz(f.size)}</div></div><button class="gi-del" onclick="delFile('${f.id}','${type}');event.stopPropagation()">✕</button></div>`
+    :`<div class="gi"><div class="gi-pdf">📄</div><div class="gi-info"><div class="gi-name">${f.originalName}</div><div class="gi-sz">${fsz(f.size)}</div></div><a href="/${f.path}" target="_blank" style="position:absolute;inset:0;opacity:0"></a><button class="gi-del" onclick="delFile('${f.id}','${type}');event.stopPropagation()">✕</button></div>`
+  ).join('')||`<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:rgba(200,232,255,.28);padding:18px">VAULT EMPTY</div>`;
+}
+async function uploadF(files,type){
+  if(!files||!files.length)return;
+  const prog=document.getElementById('ph-prog'),bar=document.getElementById('ph-prog-f'),ptxt=document.getElementById('ph-prog-t');
+  if(prog){prog.style.display='block';bar.style.width='15%';ptxt.textContent=`UPLOADING ${files.length} FILE(S)...`}
+  const fd=new FormData();
+  Array.from(files).forEach(f=>fd.append('files',f));
+  try{
+    const r=await fetch('/api/upload',{method:'POST',credentials:'include',body:fd});
+    const d=await r.json();
+    if(prog){bar.style.width='100%';setTimeout(()=>{prog.style.display='none';bar.style.width='0'},700)}
+    if(d.success){toast(`${d.files.length} file(s) uploaded ✓`,'ok');loadFiles(type)}
+    else toast('Upload failed','err');
+  }catch(e){toast('Upload error','err')}
+}
+function drop(e,type){e.preventDefault();e.currentTarget.classList.remove('drag');uploadF(e.dataTransfer.files,type)}
+async function delFile(id,type){if(!confirm('Delete?'))return;await api('DELETE',`/api/files/${id}`);toast('Deleted','ok');loadFiles(type)}
+
+// ── UTILS ──
+function ft(iso){const d=new Date(iso);return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
+function fsz(b){if(b<1024)return b+'B';if(b<1048576)return (b/1024).toFixed(1)+'KB';return (b/1048576).toFixed(1)+'MB'}
+function empty(t){return `<div style="padding:18px;font-family:'Share Tech Mono',monospace;font-size:.62rem;color:rgba(200,232,255,.26);text-align:center">${t}</div>`}
+
+// ── INIT ──
+checkAuth();
+</script>
+</body>
+</html>
