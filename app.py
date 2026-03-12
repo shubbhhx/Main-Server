@@ -440,6 +440,6 @@ def del_file(file_id):
 # ══════════════════════════════════════════════════════════
 if __name__ == '__main__':
     print('\n🚀 TOXIBH FLASK SERVER (SQLite / Termux Cloudflare Deploy)')
-    print('   Portfolio  :  http://localhost:5000')
-    print('   Admin      :  http://localhost:5000/admin\n')
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    print('   Portfolio  :  http://localhost:8080')
+    print('   Admin      :  http://localhost:8080/admin\n')
+    app.run(host='0.0.0.0', port=8080, debug=False)
