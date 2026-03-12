@@ -738,7 +738,7 @@ async function sendMessage() {
         addMessage("Checking system status...", "ai");
 
         setTimeout(() => {
-          window.open("/admin", "_blank");
+          window.location.href = "/admin";
         }, 500);
 
         return;
@@ -746,7 +746,7 @@ async function sendMessage() {
 
     } catch (e) {
       // fallback if API not reachable
-      window.open("/admin", "_blank");
+      window.location.href = "/admin";
       return;
     }
   }

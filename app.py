@@ -20,6 +20,9 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = 'toxibh_flask_secret_xR9pQz2026'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False
 
 limiter = Limiter(get_remote_address, app=app, default_limits=["500 per hour"])
 
@@ -113,14 +116,19 @@ def serve_pdf(filename):
 @app.route('/api/check-key', methods=['POST'])
 def check_key():
     data = request.get_json(silent=True) or {}
-    return jsonify({'valid': data.get('key') == SECRET_KEY})
+    is_valid = data.get('key') == SECRET_KEY
+    if is_valid:
+        session.permanent = True
+        session['admin'] = True
+        session['login_time'] = datetime.utcnow().isoformat()
+    return jsonify({'valid': is_valid})
 
 @app.route('/api/login', methods=['POST'])
 @limiter.limit("10 per 15 minutes")
 def login():
     data = request.get_json(silent=True) or {}
     u = data.get('username', '')
-    p = data.get('password', '').encode()
+    p = data.get('password', '').encode('utf-8')
     if u == ADMIN_USER and bcrypt.checkpw(p, ADMIN_PASS):
         session.permanent = True
         session['admin'] = True
