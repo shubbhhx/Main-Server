@@ -71,30 +71,10 @@ In a new Termux session run:
 Look for: inet 192.168.X.XXX
 
 Then from any device on same WiFi:
-  http://192.168.X.XXX:5000         ← Portfolio
-  http://192.168.X.XXX:5000/admin   ← Admin Panel
-
+  http://192.168.X.XXX:8080         ← Portfolio
+  http://192.168.X.XXX:8080/admin   ← Admin Panel
 ═══════════════════════════════════════════════════════════
-  STEP 6 — CONNECT PORTFOLIO CHATBOT
-═══════════════════════════════════════════════════════════
-
-Open your portfolio HTML (templates/index.html)
-Find the sendAI() function in the <script> section
-Replace it with the code from CHATBOT_TRIGGER.js
-
-Also replace sendContact() with the version in
-CHATBOT_TRIGGER.js so messages save to the database.
-
-═══════════════════════════════════════════════════════════
-  ADMIN CREDENTIALS
-═══════════════════════════════════════════════════════════
-
-  Chatbot secret key  :  toxibh-shubh@6969
-  Admin Login ID      :  toxibh-shubh@6969
-  Admin Password      :  toxibh@6967
-
-═══════════════════════════════════════════════════════════
-  STEP 7 — KEEP RUNNING IN BACKGROUND (tmux)
+  STEP 6 — KEEP RUNNING IN BACKGROUND (tmux)
 ═══════════════════════════════════════════════════════════
 
 pkg install tmux -y
@@ -108,7 +88,7 @@ Reattach later:         tmux attach -t toxibh
 Kill session:           tmux kill-session -t toxibh
 
 ═══════════════════════════════════════════════════════════
-  STEP 8 — EXPOSE TO INTERNET VIA NGROK (optional)
+  STEP 7 — EXPOSE TO INTERNET VIA NGROK (optional)
 ═══════════════════════════════════════════════════════════
 
 Download ngrok for ARM:
@@ -118,7 +98,7 @@ Download ngrok for ARM:
 
 Sign up free at ngrok.com, get auth token:
   ./ngrok config add-authtoken YOUR_TOKEN
-  ./ngrok http 5000
+  ./ngrok http 8080
 
 You get a public URL like: https://abc123.ngrok-free.app
 Use this as your portfolio URL!
