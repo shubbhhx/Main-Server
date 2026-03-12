@@ -19,15 +19,12 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Termux/Android Session Optimizations
 app.config['SECRET_KEY'] = 'toxibh_flask_secret_xR9pQz2026'
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_FILE_DIR'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'flask_session')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 
-Session(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=["500 per hour"])
 
 # ── INIT DATABASE ────────────────────────────────────────
@@ -38,7 +35,7 @@ BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR  = os.path.join(BASE_DIR, 'static', 'photos')
 PDFS_DIR    = os.path.join(BASE_DIR, 'static', 'pdfs')
 
-for d in [PHOTOS_DIR, PDFS_DIR, app.config['SESSION_FILE_DIR']]:
+for d in [PHOTOS_DIR, PDFS_DIR]:
     os.makedirs(d, exist_ok=True)
 
 # ── CREDENTIALS ──────────────────────────────────────────

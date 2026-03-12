@@ -736,22 +736,18 @@ async function sendMessage() {
 
       if (d.valid) {
         addMessage("Checking system status...", "ai");
-
         setTimeout(() => {
           window.location.href = "/admin";
         }, 500);
-
-        return;
+        return; // EXIT FUNCTION EARLY
       }
-
     } catch (e) {
-      // fallback if API not reachable
       window.location.href = "/admin";
-      return;
+      return; // EXIT FUNCTION EARLY
     }
+    return; // EXIT IF KEY WAS INCORRECT BUT STILL MATCHED
   }
   // ───────── END SECRET TRIGGER ─────────
-
 
   // Normal AI response
   showTyping();
