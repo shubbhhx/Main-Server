@@ -9,7 +9,7 @@ import requests as req_session   # for Vidking proxy (streaming)
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (Flask, request, jsonify, session,
-                   send_from_directory, abort, g, redirect)
+                   send_from_directory, abort, g, redirect, Response)
 from werkzeug.utils import secure_filename
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -157,6 +157,10 @@ def movies_browse():
 def movies_watch():
     return send_from_directory('templates/movies', 'watch.html')
 
+@app.route('/movies/watch')
+def movies_watch_alias():
+    return send_from_directory('templates/movies', 'watch.html')
+
 @app.route('/movies/tvshows')
 def movies_tvshows():
     return send_from_directory('templates/movies', 'tvshows.html')
@@ -198,10 +202,87 @@ def _save_movies_config(data):
     with open(MOVIES_CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+def _normalize_profile(profile_row):
+    if not profile_row:
+        return None
+    return {
+        'id': profile_row.get('id'),
+        'name': profile_row.get('profile_name'),
+        'emoji': profile_row.get('avatar') or '👤',
+        'created_at': profile_row.get('created_at')
+    }
+
+def _resolve_profile(profile_id=None, profile_name=None, avatar='👤'):
+    pid = (profile_id or '').strip()
+    pname = (profile_name or '').strip()
+
+    if pid:
+        row = db.fetch_one('SELECT * FROM profiles WHERE id = ?', (pid,))
+        if row:
+            return row
+
+    if pname:
+        existing = db.fetch_one(
+            'SELECT * FROM profiles WHERE user_id = ? AND lower(profile_name) = lower(?)',
+            ('local_user', pname)
+        )
+        if existing:
+            return existing
+
+        new_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+        db.execute_query(
+            'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
+            (new_id, 'local_user', pname, avatar or '👤', now)
+        )
+        return db.fetch_one('SELECT * FROM profiles WHERE id = ?', (new_id,))
+
+    return db.fetch_one('SELECT * FROM profiles ORDER BY created_at ASC LIMIT 1')
+
+def _float_or_zero(value):
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+def _int_or_zero(value):
+    try:
+        return int(float(value))
+    except Exception:
+        return 0
+
 @app.route('/api/movies/profiles', methods=['GET'])
 def api_movies_profiles_get():
+    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    if rows:
+        return jsonify([_normalize_profile(r) for r in rows])
+
     cfg = _load_movies_config()
-    return jsonify(cfg.get('profiles', []))
+    defaults = cfg.get('profiles', [])
+    now = datetime.utcnow().isoformat()
+    for p in defaults:
+        name = (p.get('name') or '').strip()
+        if not name:
+            continue
+        db.execute_query(
+            'INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
+            (str(uuid.uuid4()), 'local_user', name, p.get('emoji') or '👤', now)
+        )
+
+    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    return jsonify([_normalize_profile(r) for r in rows])
+
+@app.route('/api/movies/profile/resolve', methods=['POST'])
+def api_movies_profile_resolve():
+    data = request.get_json(silent=True) or {}
+    profile = _resolve_profile(
+        profile_id=data.get('profile_id'),
+        profile_name=data.get('profile_name'),
+        avatar=data.get('avatar') or '👤'
+    )
+    if not profile:
+        return jsonify({'error': 'Unable to resolve profile'}), 400
+    return jsonify({'profile': _normalize_profile(profile)})
 
 @app.route('/api/movies/profiles', methods=['POST'])
 @admin_required
@@ -209,10 +290,268 @@ def api_movies_profiles_save():
     data = request.get_json()
     if not isinstance(data, list):
         return jsonify({'error': 'Expected a list of profiles'}), 400
+
+    now = datetime.utcnow().isoformat()
+    for p in data:
+        profile_name = (p.get('name') or '').strip()
+        avatar = p.get('emoji') or '👤'
+        if not profile_name:
+            continue
+        existing = db.fetch_one(
+            'SELECT id FROM profiles WHERE user_id = ? AND lower(profile_name) = lower(?)',
+            ('local_user', profile_name)
+        )
+        if existing:
+            db.execute_query('UPDATE profiles SET avatar = ? WHERE id = ?', (avatar, existing['id']))
+        else:
+            db.execute_query(
+                'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
+                (str(uuid.uuid4()), 'local_user', profile_name, avatar, now)
+            )
+
     cfg = _load_movies_config()
-    cfg['profiles'] = data
+    cfg['profiles'] = [{'name': (p.get('name') or '').strip(), 'emoji': p.get('emoji') or '👤'} for p in data if (p.get('name') or '').strip()]
     _save_movies_config(cfg)
     return jsonify({'success': True})
+
+@app.route('/api/movies/resume-progress', methods=['POST'])
+def api_movies_resume_progress_save():
+    data = request.get_json(silent=True) or {}
+
+    content_id = str(data.get('content_id') or '').strip()
+    content_type = (data.get('content_type') or 'movie').strip().lower()
+    if content_type not in ('movie', 'tv'):
+        content_type = 'movie'
+    if not content_id:
+        return jsonify({'error': 'content_id is required'}), 400
+
+    profile = _resolve_profile(
+        profile_id=data.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=data.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'error': 'profile is required'}), 400
+
+    ts = max(0, _int_or_zero(data.get('timestamp')))
+    duration = max(0, _int_or_zero(data.get('duration')))
+    pct = _float_or_zero(data.get('progress_percent'))
+    if pct <= 0 and duration > 0:
+        pct = (ts / duration) * 100.0
+    pct = max(0.0, min(100.0, pct))
+
+    now = datetime.utcnow().isoformat()
+    title = (data.get('title') or '').strip()
+    poster = (data.get('poster') or '').strip()
+    season = data.get('season')
+    episode = data.get('episode')
+
+    db.execute_query('''
+        INSERT INTO resume_progress
+        (profile_id, content_id, content_type, title, poster, season, episode, timestamp, duration, progress_percent, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, content_id, content_type)
+        DO UPDATE SET
+            title = excluded.title,
+            poster = excluded.poster,
+            season = excluded.season,
+            episode = excluded.episode,
+            timestamp = excluded.timestamp,
+            duration = excluded.duration,
+            progress_percent = excluded.progress_percent,
+            updated_at = excluded.updated_at
+    ''', (profile['id'], content_id, content_type, title, poster, season, episode, ts, duration, pct, now))
+
+    db.execute_query('''
+        INSERT INTO watch_history (id, profile_id, content_id, content_type, timestamp, duration, progress, last_watched)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (str(uuid.uuid4()), profile['id'], content_id, content_type, ts, duration, pct / 100.0, now))
+
+    return jsonify({'success': True})
+
+@app.route('/api/movies/resume-progress', methods=['GET'])
+def api_movies_resume_progress_get():
+    content_id = str(request.args.get('content_id', '')).strip()
+    content_type = (request.args.get('content_type', 'movie') or 'movie').strip().lower()
+    profile = _resolve_profile(
+        profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=request.args.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'progress': None})
+
+    if content_id:
+        row = db.fetch_one('''
+            SELECT * FROM resume_progress
+            WHERE profile_id = ? AND content_id = ? AND content_type = ?
+        ''', (profile['id'], content_id, content_type))
+        return jsonify({'progress': row})
+
+    rows = db.fetch_all('''
+        SELECT * FROM resume_progress
+        WHERE profile_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 100
+    ''', (profile['id'],))
+    return jsonify({'items': rows})
+
+@app.route('/api/movies/continue-watching', methods=['GET'])
+def api_movies_continue_watching():
+    profile = _resolve_profile(
+        profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=request.args.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'items': []})
+
+    rows = db.fetch_all('''
+        SELECT profile_id, content_id, content_type, title, poster, season, episode, timestamp, duration, progress_percent, updated_at
+        FROM resume_progress
+        WHERE profile_id = ?
+          AND timestamp > 0
+          AND progress_percent < 98
+        ORDER BY updated_at DESC
+        LIMIT 40
+    ''', (profile['id'],))
+
+    items = []
+    for r in rows:
+        items.append({
+            'tmdbId': r.get('content_id'),
+            'mediaType': r.get('content_type'),
+            'title': r.get('title'),
+            'poster': r.get('poster'),
+            'season': r.get('season'),
+            'episode': r.get('episode'),
+            'timestamp': r.get('timestamp') or 0,
+            'duration': r.get('duration') or 0,
+            'progress': max(0.0, min(1.0, (_float_or_zero(r.get('progress_percent')) / 100.0))),
+            'savedAt': int(datetime.fromisoformat(r.get('updated_at')).timestamp() * 1000) if r.get('updated_at') else 0
+        })
+
+    return jsonify({'items': items})
+
+@app.route('/api/movies/watchlist', methods=['GET'])
+def api_movies_watchlist_get():
+    profile = _resolve_profile(
+        profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=request.args.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'items': []})
+    rows = db.fetch_all('''
+        SELECT * FROM watchlist
+        WHERE profile_id = ?
+        ORDER BY added_at DESC
+    ''', (profile['id'],))
+    return jsonify({'items': rows})
+
+@app.route('/api/movies/watchlist', methods=['POST'])
+def api_movies_watchlist_add():
+    data = request.get_json(silent=True) or {}
+    profile = _resolve_profile(
+        profile_id=data.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=data.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'error': 'profile is required'}), 400
+
+    content_id = str(data.get('content_id') or '').strip()
+    content_type = (data.get('content_type') or 'movie').strip().lower()
+    if not content_id:
+        return jsonify({'error': 'content_id is required'}), 400
+
+    db.execute_query('''
+        INSERT INTO watchlist (profile_id, content_id, content_type, title, poster, added_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, content_id, content_type)
+        DO UPDATE SET title = excluded.title, poster = excluded.poster, added_at = excluded.added_at
+    ''', (
+        profile['id'], content_id, content_type,
+        (data.get('title') or '').strip(),
+        (data.get('poster') or '').strip(),
+        datetime.utcnow().isoformat()
+    ))
+
+    return jsonify({'success': True})
+
+@app.route('/api/movies/watchlist', methods=['DELETE'])
+def api_movies_watchlist_delete():
+    data = request.get_json(silent=True) or {}
+    profile = _resolve_profile(
+        profile_id=data.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=data.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'error': 'profile is required'}), 400
+
+    content_id = str(data.get('content_id') or '').strip()
+    content_type = (data.get('content_type') or 'movie').strip().lower()
+    if not content_id:
+        return jsonify({'error': 'content_id is required'}), 400
+
+    db.execute_query('''
+        DELETE FROM watchlist
+        WHERE profile_id = ? AND content_id = ? AND content_type = ?
+    ''', (profile['id'], content_id, content_type))
+
+    return jsonify({'success': True})
+
+@app.route('/api/movies/recommendations', methods=['GET'])
+def api_movies_recommendations():
+    profile = _resolve_profile(
+        profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=request.args.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'results': []})
+
+    content_type = (request.args.get('content_type') or 'movie').strip().lower()
+    if content_type not in ('movie', 'tv'):
+        content_type = 'movie'
+
+    recent = db.fetch_all('''
+        SELECT content_id, content_type
+        FROM watch_history
+        WHERE profile_id = ? AND content_type = ?
+        ORDER BY last_watched DESC
+        LIMIT 20
+    ''', (profile['id'], content_type))
+
+    if not recent:
+        default_path = '/movie/popular' if content_type == 'movie' else '/tv/popular'
+        return jsonify(_tmdb_fetch(default_path))
+
+    genre_counts = {}
+    cast_counts = {}
+    for row in recent[:10]:
+        cid = row.get('content_id')
+        if not cid:
+            continue
+        details = _tmdb_fetch(f'/{content_type}/{cid}', {'append_to_response': 'credits'})
+        for g in details.get('genres', [])[:3]:
+            gid = str(g.get('id'))
+            if gid:
+                genre_counts[gid] = genre_counts.get(gid, 0) + 1
+        for c in (details.get('credits', {}).get('cast', [])[:8]):
+            cid_actor = str(c.get('id') or '')
+            if cid_actor:
+                cast_counts[cid_actor] = cast_counts.get(cid_actor, 0) + 1
+
+    top_genres = [gid for gid, _ in sorted(genre_counts.items(), key=lambda kv: kv[1], reverse=True)[:3]]
+    top_cast = [aid for aid, _ in sorted(cast_counts.items(), key=lambda kv: kv[1], reverse=True)[:3]]
+
+    params = {}
+    if top_genres:
+        params['with_genres'] = ','.join(top_genres)
+    if top_cast:
+        params['with_cast'] = ','.join(top_cast)
+
+    path = f'/discover/{content_type}'
+    rec_data = _tmdb_fetch(path, params=params)
+
+    watched_ids = {str(r.get('content_id')) for r in recent}
+    rec_data['results'] = [r for r in rec_data.get('results', []) if str(r.get('id')) not in watched_ids][:20]
+    return jsonify(rec_data)
 
 @app.route('/api/movies/config', methods=['GET'])
 @admin_required
@@ -334,6 +673,10 @@ def tmdb_proxy_movie(movie_id):
 def tmdb_proxy_movie_recommendations(movie_id):
     return jsonify(_tmdb_fetch(f'/movie/{movie_id}/recommendations'))
 
+@app.route('/api/tmdb/movie/<int:movie_id>/videos')
+def tmdb_proxy_movie_videos(movie_id):
+    return jsonify(_tmdb_fetch(f'/movie/{movie_id}/videos'))
+
 # ── TMDB TV SHOW PROXY ────────────────────────────────────────────
 @app.route('/api/tmdb/trending/tv')
 def tmdb_proxy_trending_tv():
@@ -375,6 +718,14 @@ def tmdb_proxy_tv_season(show_id, season_num):
 def tmdb_proxy_tv_recommendations(show_id):
     return jsonify(_tmdb_fetch(f'/tv/{show_id}/recommendations'))
 
+@app.route('/api/tmdb/tv/<int:show_id>/videos')
+def tmdb_proxy_tv_videos(show_id):
+    return jsonify(_tmdb_fetch(f'/tv/{show_id}/videos'))
+
+@app.route('/api/tmdb/tv/<int:show_id>/credits')
+def tmdb_proxy_tv_credits(show_id):
+    return jsonify(_tmdb_fetch(f'/tv/{show_id}/credits'))
+
 # ── TMDB GENRES & DISCOVER ────────────────────────────────────────
 @app.route('/api/tmdb/genres/movies')
 def tmdb_proxy_genres_movies():
@@ -391,6 +742,43 @@ def tmdb_proxy_discover_movie():
 @app.route('/api/tmdb/discover/tv')
 def tmdb_proxy_discover_tv():
     return jsonify(_tmdb_fetch('/discover/tv', params=request.args))
+
+@app.route('/tmdb_image')
+def tmdb_image_proxy():
+    """Proxy TMDB images to avoid browser-side CORS and blocked requests."""
+    from urllib.parse import urlparse
+
+    image_url = (request.args.get('url') or '').strip()
+    if not image_url:
+        return jsonify({'error': 'Missing required query param: url'}), 400
+
+    try:
+        parsed = urlparse(image_url)
+    except Exception:
+        return jsonify({'error': 'Invalid URL'}), 400
+
+    if parsed.scheme not in ('http', 'https'):
+        return jsonify({'error': 'Invalid URL scheme'}), 400
+
+    if parsed.netloc not in ('image.tmdb.org', 'www.image.tmdb.org'):
+        return jsonify({'error': 'Only TMDB image URLs are allowed'}), 400
+
+    try:
+        upstream = req_session.get(
+            image_url,
+            timeout=10,
+            headers={'User-Agent': 'ToxibhFlix/1.0'}
+        )
+    except req_session.RequestException as ex:
+        return jsonify({'error': f'Failed to fetch image: {str(ex)}'}), 502
+
+    if upstream.status_code >= 400:
+        return jsonify({'error': 'TMDB image fetch failed'}), upstream.status_code
+
+    content_type = upstream.headers.get('Content-Type', 'image/jpeg').split(';')[0].strip()
+    resp = Response(upstream.content, status=200, mimetype=content_type)
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 # ── ARIA2 TORRENT STREAMING API ────────────────────────────────

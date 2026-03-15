@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap');
+
+:root {
+  --cyan: #00f5ff;
+  --magenta: #ff006e;
+  --green: #00ff88;
+  --gold: #ffd60a;
+  --dark: #020408;
+  --dark2: #040d1a;
+  --grid: rgba(0, 245, 255, 0.04);
+  --glow: 0 0 20px rgba(0, 245, 255, 0.5), 0 0 60px rgba(0, 245, 255, 0.2);
+  --glow-m: 0 0 20px rgba(255, 0, 110, 0.5), 0 0 60px rgba(255, 0, 110, 0.2);
+  --glow-g: 0 0 20px rgba(0, 255, 136, 0.4), 0 0 50px rgba(0, 255, 136, 0.15);
+}
+
+#grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: gridPulse 8s ease-in-out infinite;
+}
+
+#scanline {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+}
+
+#particle-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+#loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: var(--dark);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  transition: opacity .45s, visibility .45s;
+}
+
+#loader.done {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.loader-robot-svg {
+  width: 120px;
+  height: 120px;
+  filter: drop-shadow(var(--glow));
+}
+
+.robot-outline {
+  fill: none;
+  stroke: rgba(0, 245, 255, 0.2);
+  stroke-width: 2;
+}
+
+.robot-fill {
+  fill: var(--cyan);
+  transition: height 0.1s ease, y 0.1s ease;
+}
+
+.loader-pct {
+  font-family: 'Orbitron', monospace;
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--cyan);
+  text-shadow: var(--glow);
+  margin-top: -10px;
+}
+
+.loader-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: .8rem;
+  letter-spacing: .4em;
+  color: rgba(0, 245, 255, .7);
+  animation: loaderGlow 1.5s infinite alternate;
+  text-transform: uppercase;
+}
+
+.loader-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: .65rem;
+  letter-spacing: .2em;
+  color: rgba(255, 0, 110, .6);
+  text-transform: uppercase;
+}
+
+@keyframes loaderGlow {
+  from { opacity: 0.5; }
+  to { opacity: 1; text-shadow: var(--glow); }
+}

@@ -6,6 +6,7 @@
 <title>ToxibhFlix — Browse</title>
 <meta name="description" content="ToxibhFlix — Netflix-style movie browser.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎬%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/movies/theme.css">
 <link rel="stylesheet" href="/movies/style.css">
 </head>
 <body>
@@ -13,6 +14,7 @@
 <!-- HEADER -->
 <header id="site-header">
   <div class="header-left">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Open navigation">☰</button>
     <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
     <nav class="header-nav">
       <a href="/movies/browse" class="active">Movies</a>
@@ -44,6 +46,8 @@
     <p class="hero-desc" id="hero-desc"></p>
     <div class="hero-actions">
       <a class="btn-play" id="hero-watch" href="#">▶&nbsp;&nbsp;WATCH NOW</a>
+      <button class="btn-info" id="hero-info" onclick="if(document.getElementById('hero-watch').href&&document.getElementById('hero-watch').href!=='#')window.location.href=document.getElementById('hero-watch').href">ℹ&nbsp;&nbsp;MORE INFO</button>
+      <button class="btn-info" id="hero-audio-toggle" style="display:none;" onclick="toggleHeroTrailerMute()">🔊 Unmute</button>
     </div>
   </div>
 </section>
@@ -66,9 +70,25 @@
       <div class="poster-row" id="row-continue"></div>
     </div>
 
+    <!-- Top 10 Today -->
+    <div class="row-section" id="row-top10-section">
+      <div class="row-title">🏆 Top 10 Today</div>
+      <div class="poster-row" id="row-top10"></div>
+    </div>
+
     <div class="row-section" id="row-trending-section">
       <div class="row-title">🔥 Trending This Week</div>
       <div class="poster-row" id="row-trending"></div>
+    </div>
+
+    <div class="row-section" id="row-recommended-section">
+      <div class="row-title">✨ Recommended For You</div>
+      <div class="poster-row" id="row-recommended"></div>
+    </div>
+
+    <div class="row-section" id="row-watchlist-section" style="display:none;">
+      <div class="row-title">📌 My Watchlist</div>
+      <div class="poster-row" id="row-watchlist"></div>
     </div>
 
     <!-- Browse by Genre -->
@@ -103,6 +123,46 @@
 
 <!-- TOAST -->
 <div id="toast"></div>
+
+<!-- SIDEBAR OVERLAY -->
+<div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar" role="navigation" aria-label="Site navigation">
+  <div class="sidebar-header">
+    <span class="sidebar-logo">TOXIBHFLIX</span>
+    <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Close navigation">✕</button>
+  </div>
+  <div class="sidebar-nav">
+    <a class="sidebar-link active" href="/movies/browse">
+      <span class="sidebar-icon">🎬</span> Movies
+    </a>
+    <a class="sidebar-link" href="/movies/tvshows">
+      <span class="sidebar-icon">📺</span> TV Shows
+    </a>
+    <a class="sidebar-link" href="/movies/browse#row-trending">
+      <span class="sidebar-icon">🔥</span> Trending
+    </a>
+    <a class="sidebar-link" href="/movies/browse#row-top10-section">
+      <span class="sidebar-icon">🏆</span> Top 10
+    </a>
+    <a class="sidebar-link" href="/movies/browse#row-watchlist-section">
+      <span class="sidebar-icon">📌</span> Watchlist
+    </a>
+    <a class="sidebar-link" href="/movies/browse#row-popular">
+      <span class="sidebar-icon">🌟</span> Popular
+    </a>
+    <a class="sidebar-link" href="/movies/browse#row-toprated">
+      <span class="sidebar-icon">⭐</span> Top Rated
+    </a>
+    <a class="sidebar-link" href="/movies">
+      <span class="sidebar-icon">👤</span> Profiles
+    </a>
+    <a class="sidebar-link" href="/">
+      <span class="sidebar-icon">←</span> Portfolio
+    </a>
+  </div>
+</nav>
 
 <script src="/movies/script.js?v=4"></script>
 <script>
