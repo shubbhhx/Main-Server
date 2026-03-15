@@ -157,6 +157,14 @@ def movies_browse():
 def movies_watch():
     return send_from_directory('templates/movies', 'watch.html')
 
+@app.route('/movies/tvshows')
+def movies_tvshows():
+    return send_from_directory('templates/movies', 'tvshows.html')
+
+@app.route('/movies/watch-tv')
+def movies_watch_tv():
+    return send_from_directory('templates/movies', 'watch-tv.html')
+
 @app.route('/movies/torrent')
 def movies_torrent():
     return send_from_directory('templates/movies', 'torrent.html')
@@ -325,6 +333,65 @@ def tmdb_proxy_movie(movie_id):
 @app.route('/api/tmdb/movie/<int:movie_id>/recommendations')
 def tmdb_proxy_movie_recommendations(movie_id):
     return jsonify(_tmdb_fetch(f'/movie/{movie_id}/recommendations'))
+
+# ── TMDB TV SHOW PROXY ────────────────────────────────────────────
+@app.route('/api/tmdb/trending/tv')
+def tmdb_proxy_trending_tv():
+    return jsonify(_tmdb_fetch('/trending/tv/week'))
+
+@app.route('/api/tmdb/popular/tv')
+def tmdb_proxy_popular_tv():
+    return jsonify(_tmdb_fetch('/tv/popular'))
+
+@app.route('/api/tmdb/top-rated/tv')
+def tmdb_proxy_top_rated_tv():
+    return jsonify(_tmdb_fetch('/tv/top_rated'))
+
+@app.route('/api/tmdb/airing/tv')
+def tmdb_proxy_airing_tv():
+    return jsonify(_tmdb_fetch('/tv/airing_today'))
+
+@app.route('/api/tmdb/on-air/tv')
+def tmdb_proxy_on_air_tv():
+    return jsonify(_tmdb_fetch('/tv/on_the_air'))
+
+@app.route('/api/tmdb/search/tv')
+def tmdb_proxy_search_tv():
+    q = request.args.get('q', '')
+    page = request.args.get('page', 1)
+    if not q:
+        return jsonify({'results': []})
+    return jsonify(_tmdb_fetch('/search/tv', {'query': q, 'page': page}))
+
+@app.route('/api/tmdb/tv/<int:show_id>')
+def tmdb_proxy_tv_show(show_id):
+    return jsonify(_tmdb_fetch(f'/tv/{show_id}'))
+
+@app.route('/api/tmdb/tv/<int:show_id>/season/<int:season_num>')
+def tmdb_proxy_tv_season(show_id, season_num):
+    return jsonify(_tmdb_fetch(f'/tv/{show_id}/season/{season_num}'))
+
+@app.route('/api/tmdb/tv/<int:show_id>/recommendations')
+def tmdb_proxy_tv_recommendations(show_id):
+    return jsonify(_tmdb_fetch(f'/tv/{show_id}/recommendations'))
+
+# ── TMDB GENRES & DISCOVER ────────────────────────────────────────
+@app.route('/api/tmdb/genres/movies')
+def tmdb_proxy_genres_movies():
+    return jsonify(_tmdb_fetch('/genre/movie/list'))
+
+@app.route('/api/tmdb/genres/tv')
+def tmdb_proxy_genres_tv():
+    return jsonify(_tmdb_fetch('/genre/tv/list'))
+
+@app.route('/api/tmdb/discover/movie')
+def tmdb_proxy_discover_movie():
+    return jsonify(_tmdb_fetch('/discover/movie', params=request.args))
+
+@app.route('/api/tmdb/discover/tv')
+def tmdb_proxy_discover_tv():
+    return jsonify(_tmdb_fetch('/discover/tv', params=request.args))
+
 
 # ── ARIA2 TORRENT STREAMING API ────────────────────────────────
 ARIA2_RPC  = os.environ.get('ARIA2_RPC', 'http://localhost:6800/jsonrpc')

@@ -676,12 +676,68 @@ body {
 
   #recommendations { padding: 0 16px 40px; }
 
-  --card-w: 140px;
-  --card-h: 210px;
+  :root {
+    --card-w: 140px;
+    --card-h: 210px;
+  }
 }
 
 @media (max-width: 480px) {
-  --card-w: 120px;
-  --card-h: 180px;
+  :root {
+    --card-w: 120px;
+    --card-h: 180px;
+  }
   .logo { font-size: 1.2rem; }
+}
+
+/* ── CONTINUE WATCHING ────────────────────────────────────── */
+.continue-card {
+  position: relative;
+}
+.continue-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  z-index: 5;
+}
+.continue-progress-fill {
+  height: 100%;
+  background: var(--nf-red);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
+}
+
+/* ── GENRES BROWSER ───────────────────────────────────────── */
+.genre-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 10px 0 15px 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.genre-row::-webkit-scrollbar { display: none; }
+
+.genre-pill {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 8px 18px;
+  border-radius: 20px;
+  color: var(--nf-text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.genre-pill:hover, .genre-pill.active {
+  background: var(--nf-red);
+  color: #fff;
+  border-color: var(--nf-red);
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.4);
+  transform: translateY(-2px);
 }

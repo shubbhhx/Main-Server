@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ToxibhFlix — Browse</title>
-<meta name="description" content="ToxibhFlix — Netflix-style movie browser.">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎬%3C/text%3E%3C/svg%3E">
+<title>ToxibhFlix — TV Shows</title>
+<meta name="description" content="ToxibhFlix — Browse and stream TV shows.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📺%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/movies/style.css">
 </head>
 <body>
@@ -15,17 +15,17 @@
   <div class="header-left">
     <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
     <nav class="header-nav">
-      <a href="/movies/browse" class="active">Movies</a>
-      <a href="/movies/tvshows">TV Shows</a>
-      <a href="/movies/browse#row-trending">Trending</a>
-      <a href="/movies/browse#row-popular">Popular</a>
-      <a href="/movies/browse#row-toprated">Top Rated</a>
+      <a href="/movies/browse">Movies</a>
+      <a href="/movies/tvshows" class="active">TV Shows</a>
+      <a href="/movies/tvshows#row-trending">Trending</a>
+      <a href="/movies/tvshows#row-popular">Popular</a>
+      <a href="/movies/tvshows#row-toprated">Top Rated</a>
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:16px;">
     <div class="search-wrapper">
       <span class="search-icon">🔍</span>
-      <input type="text" id="search-input" placeholder="Search movies..." autocomplete="off" spellcheck="false">
+      <input type="text" id="search-input" placeholder="Search TV shows..." autocomplete="off" spellcheck="false">
     </div>
     <a href="/movies" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
     <a href="/" class="back-btn">← Portfolio</a>
@@ -71,20 +71,8 @@
       <div class="poster-row" id="row-trending"></div>
     </div>
 
-    <!-- Browse by Genre -->
-    <div class="row-section" id="genre-section">
-      <div class="row-title">🎬 Browse by Genre</div>
-      <div class="genre-row" id="movie-genres"></div>
-    </div>
-
-    <!-- Genre Results (Hidden by default) -->
-    <div class="row-section" id="movie-genre-results" style="display:none;">
-      <div class="row-title" id="movie-genre-title">Genre Results</div>
-      <div class="poster-row" id="movie-genre-row"></div>
-    </div>
-
     <div class="row-section" id="row-popular-section">
-      <div class="row-title">🌟 Popular Movies</div>
+      <div class="row-title">🌟 Popular TV Shows</div>
       <div class="poster-row" id="row-popular"></div>
     </div>
 
@@ -93,9 +81,26 @@
       <div class="poster-row" id="row-toprated"></div>
     </div>
 
-    <div class="row-section" id="row-upcoming-section">
-      <div class="row-title">🎬 Coming Soon</div>
-      <div class="poster-row" id="row-upcoming"></div>
+    <div class="row-section" id="row-airing-section">
+      <div class="row-title">📡 Airing Today</div>
+      <div class="poster-row" id="row-airing"></div>
+    </div>
+
+    <div class="row-section" id="row-onair-section">
+      <div class="row-title">📺 On The Air</div>
+      <div class="poster-row" id="row-onair"></div>
+    </div>
+
+    <!-- Browse by Genre -->
+    <div class="row-section" id="genre-section">
+      <div class="row-title">🎬 Browse by Genre</div>
+      <div class="genre-row" id="tv-genres"></div>
+    </div>
+
+    <!-- Genre Results (Hidden by default) -->
+    <div class="row-section" id="tv-genre-results" style="display:none;">
+      <div class="row-title" id="tv-genre-title">Genre Results</div>
+      <div class="poster-row" id="tv-genre-row"></div>
     </div>
   </div>
 
@@ -107,17 +112,14 @@
 <script src="/movies/script.js?v=4"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // Show active profile name
     const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
     if (p) {
       const nameEl = document.getElementById('profile-name-display');
       if (nameEl) nameEl.textContent = p.name;
     } else {
-      // No profile — redirect to profiles
       window.location.href = '/movies';
     }
-    initIndexPage();
-    loadContinueWatching('row-continue');
+    initTVPage();
   });
 </script>
 </body>
