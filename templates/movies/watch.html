@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watch — ToxibhFlix</title>
+<meta name="description" content="Watch movies on ToxibhFlix.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎬%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/movies/style.css">
+<style>
+  /* Watch-page extras */
+  #watch-poster-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  #watch-poster {
+    width: 160px;
+    border-radius: 6px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 20px rgba(229,9,20,0.4);
+    border: 2px solid #e50914;
+    display: block;
+  }
+  .watch-placeholder-poster {
+    width: 160px;
+    height: 240px;
+    background: linear-gradient(135deg,#1a0008,#0a0010);
+    border: 2px solid #e50914;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+  }
+  #watch-tagline {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    color: rgba(229,9,20,0.7);
+    font-style: italic;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .watch-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header id="site-header">
+  <div class="header-left">
+    <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
+    <nav class="header-nav">
+      <a href="/movies/browse">Browse</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <a href="/movies/browse" class="back-btn">← All Movies</a>
+    <a href="/movies" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:6px;">👤 <span id="profile-name-display">Switch</span></a>
+    <a href="/" class="back-btn">← Portfolio</a>
+  </div>
+</header>
+
+<!-- MOVIE HERO -->
+<section id="watch-hero">
+  <div class="watch-backdrop" id="watch-backdrop"></div>
+  <div class="watch-vignette"></div>
+  <div class="watch-hero-content">
+    <div id="watch-poster-wrap">
+      <img id="watch-poster" src="" alt="" onerror="this.outerHTML='<div class=watch-placeholder-poster>🎬</div>'">
+    </div>
+    <div class="watch-meta-col">
+      <div class="watch-badge">Now Playing</div>
+      <h1 class="watch-title" id="watch-title">Loading…</h1>
+      <div id="watch-tagline"></div>
+      <div class="watch-meta-row">
+        <span class="watch-rating" id="watch-rating"></span>
+        <span id="watch-year"></span>
+        <span id="watch-runtime"></span>
+      </div>
+      <div class="watch-genres" id="watch-genres"></div>
+      <p class="watch-overview" id="watch-overview"></p>
+      <div class="watch-actions">
+        <button class="btn-play" id="watch-btn">▶&nbsp;&nbsp;WATCH NOW</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PLAYER SECTION -->
+<section id="player-section">
+
+  <!-- Resume banner -->
+  <div class="resume-banner" id="resume-banner">
+    <span>🕐 You left off at <strong id="resume-time"></strong></span>
+    <div style="display:flex;gap:10px;">
+      <button class="resume-btn" id="resume-btn">RESUME</button>
+      <button class="resume-btn" id="watch-btn-fresh" onclick="loadPlayer(window._currentMovieId,0);document.getElementById('resume-banner').classList.remove('visible');"
+        style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);">
+        START OVER
+      </button>
+    </div>
+  </div>
+
+
+  <!-- Iframe container -->
+  <div class="player-container" id="player-container">
+    <!-- Placeholder until user clicks Watch -->
+    <div id="player-placeholder" style="
+      height:580px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:20px;
+      background:linear-gradient(135deg,#0a0a0f,#140008);
+      cursor:pointer;"
+      onclick="document.getElementById('watch-btn').click()">
+      <div style="font-size:5rem;opacity:0.25;">🎬</div>
+      <div style="font-family:'Orbitron',monospace;font-size:0.75rem;letter-spacing:0.25em;color:rgba(229,9,20,0.6);text-transform:uppercase;">Click Watch Now to Start</div>
+    </div>
+  </div>
+
+</section>
+
+<!-- RECOMMENDED -->
+<section id="recommendations" class="row-section">
+  <div class="row-title">🎞 You Might Also Like</div>
+  <div class="poster-row" id="row-recs"></div>
+</section>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script src="/movies/script.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Show active profile name
+    const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    if (p) {
+      const nameEl = document.getElementById('profile-name-display');
+      if (nameEl) nameEl.textContent = p.name;
+    }
+    initWatchPage();
+
+    // Progress saved indicator
+    let progressTimeout;
+    window.addEventListener('message', function (event) {
+      if (!event.data || typeof event.data !== 'object') return;
+      if (event.data.type === 'timeupdate' && event.data.currentTime > 5) {
+        const pi = document.getElementById('progress-indicator');
+        const pt = document.getElementById('progress-text');
+        if (pi) pi.style.display = 'flex';
+        if (pt) pt.textContent = 'Progress saved (' + formatTime(event.data.currentTime) + ')';
+        clearTimeout(progressTimeout);
+        progressTimeout = setTimeout(() => {
+          if (pi) pi.style.display = 'none';
+        }, 3000);
+      }
+    });
+  });
+</script>
+</body>
+</html>

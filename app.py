@@ -3,7 +3,8 @@
 #  Run:  python app.py
 # ═══════════════════════════════════════════════════════════
 
-import os, uuid, bcrypt, mimetypes, json, time
+import os, uuid, bcrypt, mimetypes, json, time, re
+import urllib.request, urllib.error
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (Flask, request, jsonify, session,
@@ -38,6 +39,40 @@ PDFS_DIR    = os.path.join(BASE_DIR, 'static', 'pdfs')
 
 for d in [PHOTOS_DIR, PDFS_DIR]:
     os.makedirs(d, exist_ok=True)
+
+# ── TORRENT AUTO-CLEANUP (1-day TTL) ─────────────────────────
+import threading, shutil
+
+def _torrent_cleanup_loop():
+    """Background thread: delete torrent files older than 24 hours."""
+    TORRENT_DIR = os.path.expanduser('~/torrents')
+    TTL_SECONDS = 24 * 60 * 60  # 1 day
+    CHECK_EVERY = 60 * 60       # check every 1 hour
+    while True:
+        try:
+            if os.path.isdir(TORRENT_DIR):
+                now = time.time()
+                deleted = []
+                for entry in os.listdir(TORRENT_DIR):
+                    full = os.path.join(TORRENT_DIR, entry)
+                    try:
+                        age = now - os.path.getmtime(full)
+                        if age > TTL_SECONDS:
+                            if os.path.isdir(full):
+                                shutil.rmtree(full, ignore_errors=True)
+                            else:
+                                os.remove(full)
+                            deleted.append(entry)
+                    except Exception:
+                        pass
+                if deleted:
+                    print(f'[ToxibhFlix cleanup] Deleted {len(deleted)} old torrent(s): {deleted}')
+        except Exception as e:
+            print(f'[ToxibhFlix cleanup] Error: {e}')
+        time.sleep(CHECK_EVERY)
+
+_cleanup_thread = threading.Thread(target=_torrent_cleanup_loop, daemon=True)
+_cleanup_thread.start()
 
 # ── CREDENTIALS ──────────────────────────────────────────
 SECRET_KEY   = 'toxibh-shubh@6969'
@@ -109,7 +144,254 @@ def admin_page():
         return redirect('/')
     return send_from_directory('templates', 'admin.html')
 
-# Protected file serving
+@app.route('/movies')
+def movies_page():
+    return send_from_directory('templates/movies', 'profiles.html')
+
+@app.route('/movies/browse')
+def movies_browse():
+    return send_from_directory('templates/movies', 'index.html')
+
+@app.route('/movies/watch.html')
+def movies_watch():
+    return send_from_directory('templates/movies', 'watch.html')
+
+@app.route('/movies/torrent')
+def movies_torrent():
+    return send_from_directory('templates/movies', 'torrent.html')
+
+@app.route('/movies/<path:filename>')
+def movies_static(filename):
+    return send_from_directory('templates/movies', filename)
+
+# ── TOXIBHFLIX MANAGEMENT API ─────────────────────────────────────
+MOVIES_CONFIG_FILE = 'movies_config.json'
+
+def _load_movies_config():
+    """Load movies config (profiles + TMDB key) from JSON file."""
+    if os.path.exists(MOVIES_CONFIG_FILE):
+        try:
+            with open(MOVIES_CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        'profiles': [
+            {'name': 'Shubham',    'emoji': '🤖'},
+            {'name': 'Chill Mode', 'emoji': '🎮'},
+            {'name': 'Night Owl',  'emoji': '🌙'},
+            {'name': 'Action Fan', 'emoji': '⚡'},
+        ],
+        'tmdb_key': ''
+    }
+
+def _save_movies_config(data):
+    with open(MOVIES_CONFIG_FILE, 'w') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+@app.route('/api/movies/profiles', methods=['GET'])
+def api_movies_profiles_get():
+    cfg = _load_movies_config()
+    return jsonify(cfg.get('profiles', []))
+
+@app.route('/api/movies/profiles', methods=['POST'])
+@admin_required
+def api_movies_profiles_save():
+    data = request.get_json()
+    if not isinstance(data, list):
+        return jsonify({'error': 'Expected a list of profiles'}), 400
+    cfg = _load_movies_config()
+    cfg['profiles'] = data
+    _save_movies_config(cfg)
+    return jsonify({'success': True})
+
+@app.route('/api/movies/config', methods=['GET'])
+@admin_required
+def api_movies_config_get():
+    cfg = _load_movies_config()
+    return jsonify({'tmdb_key': cfg.get('tmdb_key', '')})
+
+@app.route('/api/movies/config', methods=['POST'])
+@admin_required
+def api_movies_config_save():
+    data = request.get_json()
+    cfg = _load_movies_config()
+    if 'tmdb_key' in data:
+        cfg['tmdb_key'] = data['tmdb_key'].strip()
+    _save_movies_config(cfg)
+    # Also update script.js to inject key
+    return jsonify({'success': True})
+
+@app.route('/api/movies/tmdb-status', methods=['GET'])
+@admin_required
+def api_movies_tmdb_status():
+    import urllib.request, urllib.error
+    cfg = _load_movies_config()
+    key = cfg.get('tmdb_key', '')
+    if not key:
+        return jsonify({'status': 'no_key', 'message': 'No TMDB API key configured'})
+    try:
+        url = f'https://api.themoviedb.org/3/configuration?api_key={key}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'ToxibhFlix/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as res:
+            if res.status == 200:
+                return jsonify({'status': 'ok', 'message': 'TMDB API is reachable ✓', 'code': 200})
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return jsonify({'status': 'invalid_key', 'message': 'Invalid API key (401)', 'code': 401})
+        return jsonify({'status': 'error', 'message': f'HTTP {e.code}', 'code': e.code})
+    except Exception as ex:
+        return jsonify({'status': 'unreachable', 'message': str(ex)})
+    return jsonify({'status': 'unknown'})
+
+# ── ARIA2 TORRENT STREAMING API ────────────────────────────────
+ARIA2_RPC  = os.environ.get('ARIA2_RPC', 'http://localhost:6800/jsonrpc')
+ARIA2_SEC  = os.environ.get('ARIA2_SECRET', 'toxibhflix123')
+ARIA2_DIR  = os.path.expanduser(os.environ.get('ARIA2_DIR', '~/torrents'))
+
+VIDEO_EXTS = ('.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.ogv', '.wmv')
+MIME_MAP   = {
+    'mp4': 'video/mp4', 'webm': 'video/webm', 'ogv': 'video/ogg',
+    'mkv': 'video/x-matroska', 'avi': 'video/x-msvideo',
+    'mov': 'video/quicktime', 'm4v': 'video/x-m4v', 'wmv': 'video/x-ms-wmv',
+}
+
+def aria2_call(method, params=None):
+    """Call aria2 JSON-RPC and return result or raise."""
+    payload = json.dumps({
+        'jsonrpc': '2.0', 'id': 'tfx', 'method': method,
+        'params': [f'token:{ARIA2_SEC}'] + (params or [])
+    }).encode()
+    req = urllib.request.Request(
+        ARIA2_RPC, data=payload,
+        headers={'Content-Type': 'application/json'}, method='POST'
+    )
+    with urllib.request.urlopen(req, timeout=5) as r:
+        data = json.loads(r.read())
+    if 'error' in data:
+        raise RuntimeError(data['error'].get('message', 'aria2 error'))
+    return data.get('result')
+
+@app.route('/api/torrent/ping')
+def api_torrent_ping():
+    """Check if aria2 is reachable."""
+    try:
+        v = aria2_call('aria2.getVersion')
+        return jsonify({'ok': True, 'version': v.get('version', '?')})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/api/torrent/add', methods=['POST'])
+def api_torrent_add():
+    data = request.get_json()
+    magnet = (data or {}).get('magnet', '').strip()
+    if not magnet.startswith('magnet:'):
+        return jsonify({'error': 'Invalid magnet link'}), 400
+    try:
+        gid = aria2_call('aria2.addUri', [[magnet], {'dir': ARIA2_DIR, 'seed-ratio': '0'}])
+        return jsonify({'gid': gid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/torrent/status/<gid>')
+def api_torrent_status(gid):
+    try:
+        s = aria2_call('aria2.tellStatus', [gid])
+        # Identify video files
+        files = s.get('files', [])
+        for f in files:
+            ext = os.path.splitext(f.get('path', ''))[1].lower()
+            f['is_video'] = ext in VIDEO_EXTS
+        return jsonify(s)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/torrent/list')
+def api_torrent_list():
+    try:
+        active  = aria2_call('aria2.tellActive') or []
+        waiting = aria2_call('aria2.tellWaiting', [0, 20]) or []
+        stopped = aria2_call('aria2.tellStopped', [0, 10]) or []
+        return jsonify({'active': active, 'waiting': waiting, 'stopped': stopped})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/torrent/remove/<gid>', methods=['DELETE'])
+def api_torrent_remove(gid):
+    try:
+        aria2_call('aria2.forceRemove', [gid])
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/torrent/stream/<gid>')
+def api_torrent_stream(gid):
+    """Stream the largest video file in a torrent via Range requests."""
+    try:
+        file_idx = request.args.get('file', None)
+        s = aria2_call('aria2.tellStatus', [gid])
+        files = s.get('files', [])
+
+        # Find video file (by index param or largest video)
+        video_files = [
+            f for f in files
+            if os.path.splitext(f.get('path',''))[1].lower() in VIDEO_EXTS
+        ]
+        if not video_files:
+            return jsonify({'error': 'No video file found yet'}), 404
+
+        if file_idx is not None:
+            chosen = next((f for f in files if f.get('index') == str(file_idx)), video_files[0])
+        else:
+            chosen = max(video_files, key=lambda f: int(f.get('length', 0)))
+
+        path = chosen.get('path', '')
+        if not path or not os.path.exists(path):
+            return jsonify({'error': 'File not yet on disk — wait a moment'}), 404
+
+        ext  = os.path.splitext(path)[1].lstrip('.').lower()
+        mime = MIME_MAP.get(ext, 'video/mp4')
+        file_size = os.path.getsize(path)
+
+        from flask import Response
+        range_header = request.headers.get('Range')
+        if range_header:
+            m = re.match(r'bytes=(\d+)-(\d*)', range_header)
+            if not m:
+                return Response(status=416)
+            start = int(m.group(1))
+            end   = int(m.group(2)) if m.group(2) else file_size - 1
+            end   = min(end, file_size - 1)
+            length = end - start + 1
+            def chunk_gen(path, start, length):
+                with open(path, 'rb') as f:
+                    f.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        read = min(65536, remaining)
+                        buf  = f.read(read)
+                        if not buf: break
+                        remaining -= len(buf)
+                        yield buf
+            resp = Response(chunk_gen(path, start, length), 206, mimetype=mime)
+            resp.headers['Content-Range']  = f'bytes {start}-{end}/{file_size}'
+            resp.headers['Accept-Ranges']  = 'bytes'
+            resp.headers['Content-Length'] = str(length)
+            return resp
+        else:
+            def full_gen(path):
+                with open(path, 'rb') as f:
+                    while True:
+                        buf = f.read(65536)
+                        if not buf: break
+                        yield buf
+            resp = Response(full_gen(path), 200, mimetype=mime)
+            resp.headers['Accept-Ranges']  = 'bytes'
+            resp.headers['Content-Length'] = str(file_size)
+            return resp
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/static/photos/<path:filename>')
 @admin_required
 def serve_photo(filename):

@@ -315,6 +315,8 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
       <div class="sb-grp">VAULT</div>
       <div class="si" onclick="nav('photos')"><span class="si-ico">🖼️</span>PHOTO VAULT</div>
       <div class="si" onclick="nav('pdfs')"><span class="si-ico">📄</span>PDF VAULT</div>
+      <div class="sb-grp">TOXIBHFLIX</div>
+      <div class="si" onclick="nav('flix')"><span class="si-ico">🎬</span>FLIX MANAGER</div>
     </div>
     <div class="sb-bot">
       <div class="sb-u" id="sb-u">SESSION ACTIVE</div>
@@ -494,6 +496,49 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
       <div class="gg-grid" id="pdf-grid"></div>
     </div>
 
+    <!-- TOXIBHFLIX MANAGER -->
+    <div class="pg" id="pg-flix">
+      <div class="tb"><div class="tb-title">TOXIBHFLIX <em>MANAGER</em></div></div>
+
+      <!-- API KEY STATUS -->
+      <div class="pnl" style="margin-bottom:18px">
+        <div class="pnl-h"><span class="pnl-hl">🔑 TMDB API KEY &amp; STATUS</span></div>
+        <div class="pnl-b">
+          <div class="fr">
+            <div class="fg">
+              <label class="fl">API KEY</label>
+              <input class="fi" id="tmdb-key-input" type="text" placeholder="Enter TMDB API key..." autocomplete="off">
+            </div>
+            <div class="fg" style="justify-content:flex-end">
+              <label class="fl">STATUS</label>
+              <div id="tmdb-status-badge" style="
+                font-family:'Share Tech Mono',monospace;font-size:.7rem;
+                padding:9px 14px;border:1px solid rgba(0,245,255,.15);
+                color:rgba(200,232,255,.45);background:rgba(0,245,255,.02)
+              ">— NOT CHECKED</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px;">
+            <button class="btn-s" onclick="saveApiKey()">SAVE KEY ⚡</button>
+            <button class="btn-s" onclick="checkTmdbStatus()" style="background:rgba(0,245,255,.12);color:var(--c);border:1px solid rgba(0,245,255,.3);">TEST CONNECTION 🌐</button>
+          </div>
+          <div id="tmdb-last-check" style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:rgba(200,232,255,.3);margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <!-- PROFILES EDITOR -->
+      <div class="pnl">
+        <div class="pnl-h">
+          <span class="pnl-hl">👤 PROFILE MANAGER</span>
+          <button class="btn-s" onclick="saveProfiles()" style="font-size:.56rem;padding:6px 14px">SAVE CHANGES ✓</button>
+        </div>
+        <div class="pnl-b">
+          <div id="profile-editor" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:14px"></div>
+          <button class="btn-s" onclick="addProfileSlot()" style="background:rgba(0,245,255,.1);color:var(--c);border:1px solid rgba(0,245,255,.25);font-size:.58rem">+ ADD PROFILE</button>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -566,6 +611,7 @@ function nav(pg){
   else if(pg==='pw'){loadPwData();}
   else if(pg==='photos')loadFiles('photo');
   else if(pg==='pdfs')loadFiles('pdf');
+  else if(pg==='flix')loadFlix();
 }
 
 // ── DASHBOARD ──
@@ -758,6 +804,93 @@ async function delFile(id,type){if(!confirm('Delete?'))return;await api('DELETE'
 function ft(iso){const d=new Date(iso);return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
 function fsz(b){if(b<1024)return b+'B';if(b<1048576)return (b/1024).toFixed(1)+'KB';return (b/1048576).toFixed(1)+'MB'}
 function empty(t){return `<div style="padding:18px;font-family:'Share Tech Mono',monospace;font-size:.62rem;color:rgba(200,232,255,.26);text-align:center">${t}</div>`}
+
+// ── TOXIBHFLIX MANAGER ──
+let _flixProfiles = [];
+
+async function loadFlix() {
+  // Load API key
+  const cfg = await api('GET', '/api/movies/config');
+  if (cfg && cfg.tmdb_key) document.getElementById('tmdb-key-input').value = cfg.tmdb_key;
+  // Load profiles
+  const profiles = await api('GET', '/api/movies/profiles');
+  _flixProfiles = profiles || [];
+  renderProfileEditor();
+}
+
+function renderProfileEditor() {
+  const ed = document.getElementById('profile-editor');
+  if (!ed) return;
+  ed.innerHTML = _flixProfiles.map((p, i) => `
+    <div style="background:rgba(0,245,255,.025);border:1px solid rgba(0,245,255,.1);padding:13px;position:relative">
+      <div class="fr full" style="margin-bottom:8px">
+        <div class="fg">
+          <label class="fl">EMOJI</label>
+          <input class="fi" style="font-size:1.4rem;text-align:center" value="${p.emoji}" id="fe-${i}" maxlength="2">
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fl">DISPLAY NAME</label>
+        <input class="fi" value="${p.name}" id="fn-${i}">
+      </div>
+      <button class="ta ta-d" onclick="removeProfile(${i})" style="width:100%;padding:5px">REMOVE</button>
+    </div>`).join('');
+}
+
+function addProfileSlot() {
+  _flixProfiles.push({ name: 'New Profile', emoji: '👤' });
+  renderProfileEditor();
+}
+
+function removeProfile(idx) {
+  if (!confirm('Remove this profile?')) return;
+  _flixProfiles.splice(idx, 1);
+  renderProfileEditor();
+}
+
+async function saveProfiles() {
+  // Read current values from inputs
+  _flixProfiles = _flixProfiles.map((p, i) => ({
+    emoji: (document.getElementById('fe-' + i)?.value || p.emoji).trim(),
+    name:  (document.getElementById('fn-' + i)?.value || p.name).trim(),
+  }));
+  const r = await api('POST', '/api/movies/profiles', _flixProfiles);
+  if (r.success) toast('Profiles saved ✓', 'ok');
+  else toast('Save failed', 'err');
+}
+
+async function saveApiKey() {
+  const key = document.getElementById('tmdb-key-input').value.trim();
+  if (!key) { toast('Enter a key first', 'err'); return; }
+  const r = await api('POST', '/api/movies/config', { tmdb_key: key });
+  if (r.success) {
+    toast('Key saved ✓', 'ok');
+    checkTmdbStatus();
+  } else toast('Save failed', 'err');
+}
+
+async function checkTmdbStatus() {
+  const badge = document.getElementById('tmdb-status-badge');
+  const lastCheck = document.getElementById('tmdb-last-check');
+  if (badge) { badge.style.color='rgba(200,232,255,.45)'; badge.textContent = '⏳ CHECKING...'; }
+  const r = await api('GET', '/api/movies/tmdb-status');
+  const now = new Date().toLocaleTimeString('en-GB');
+  if (!badge) return;
+  if (r.status === 'ok') {
+    badge.style.color = 'var(--g)'; badge.style.borderColor = 'rgba(0,255,136,.35)';
+    badge.textContent = '✓ ONLINE';
+  } else if (r.status === 'invalid_key') {
+    badge.style.color = 'var(--m)'; badge.style.borderColor = 'rgba(255,0,110,.35)';
+    badge.textContent = '❌ INVALID KEY';
+  } else if (r.status === 'no_key') {
+    badge.style.color = 'var(--gold)'; badge.style.borderColor = 'rgba(255,214,10,.35)';
+    badge.textContent = '⚠ NO KEY SET';
+  } else {
+    badge.style.color = 'var(--m)'; badge.style.borderColor = 'rgba(255,0,110,.35)';
+    badge.textContent = '⚠ ' + (r.message || 'UNREACHABLE');
+  }
+  if (lastCheck) lastCheck.textContent = 'Last checked: ' + now + ' · ' + (r.message || '');
+}
 
 // ── INIT ──
 checkAuth();

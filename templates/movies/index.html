@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ToxibhFlix — Browse</title>
+<meta name="description" content="ToxibhFlix — Netflix-style movie browser.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎬%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/movies/style.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header id="site-header">
+  <div class="header-left">
+    <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
+    <nav class="header-nav">
+      <a href="/movies/browse" class="active">Browse</a>
+      <a href="/movies/browse#row-trending">Trending</a>
+      <a href="/movies/browse#row-popular">Popular</a>
+      <a href="/movies/browse#row-toprated">Top Rated</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="search-wrapper">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search movies..." autocomplete="off" spellcheck="false">
+    </div>
+    <a href="/movies" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
+    <a href="/" class="back-btn">← Portfolio</a>
+  </div>
+</header>
+
+<!-- HERO BANNER -->
+<section id="hero-banner">
+  <div class="hero-backdrop" id="hero-backdrop"></div>
+  <div class="hero-vignette"></div>
+  <div class="hero-vignette-side"></div>
+  <div class="hero-content">
+    <div class="hero-badge">Featured Today</div>
+    <h1 class="hero-title" id="hero-title">Loading…</h1>
+    <div class="hero-meta" id="hero-meta"></div>
+    <p class="hero-desc" id="hero-desc"></p>
+    <div class="hero-actions">
+      <a class="btn-play" id="hero-watch" href="#">▶&nbsp;&nbsp;WATCH NOW</a>
+    </div>
+  </div>
+</section>
+
+<!-- MAIN CONTENT -->
+<main id="main-content">
+
+  <!-- Search results (hidden unless searching) -->
+  <section id="search-section">
+    <div class="search-section-title" id="search-label">Results for <span></span></div>
+    <div class="search-grid" id="search-grid"></div>
+  </section>
+
+  <!-- Browse rows -->
+  <div id="browse-section">
+    <div class="row-section" id="row-trending-section">
+      <div class="row-title">🔥 Trending This Week</div>
+      <div class="poster-row" id="row-trending"></div>
+    </div>
+
+    <div class="row-section" id="row-popular-section">
+      <div class="row-title">🌟 Popular Movies</div>
+      <div class="poster-row" id="row-popular"></div>
+    </div>
+
+    <div class="row-section" id="row-toprated-section">
+      <div class="row-title">🏆 Top Rated</div>
+      <div class="poster-row" id="row-toprated"></div>
+    </div>
+
+    <div class="row-section" id="row-upcoming-section">
+      <div class="row-title">🎬 Coming Soon</div>
+      <div class="poster-row" id="row-upcoming"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script src="/movies/script.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Show active profile name
+    const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    if (p) {
+      const nameEl = document.getElementById('profile-name-display');
+      if (nameEl) nameEl.textContent = p.name;
+    } else {
+      // No profile — redirect to profiles
+      window.location.href = '/movies';
+    }
+    initIndexPage();
+  });
+</script>
+</body>
+</html>

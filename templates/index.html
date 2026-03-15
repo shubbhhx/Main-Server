@@ -422,6 +422,7 @@
     <a href="#certifications">Certs</a>
     <a href="#education">Education</a>
     <a href="#games">Games</a>
+    <a href="/movies" id="movies-nav-link">Movies</a>
     <a href="#contact">Contact</a>
   </div>
   <div class="nav-status">
@@ -1777,6 +1778,41 @@ async function submitContactForm(e) {
   }
 }
 
+</script>
+
+<!-- TOXIBHFLIX CINEMATIC TRANSITION OVERLAY -->
+<div id="toxibhflix-overlay" style="
+  position:fixed;inset:0;z-index:999999;
+  background:#000;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  opacity:0;transition:opacity 0.3s;">
+  <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+    <div id="tfx-letter" style="
+      font-family:'Orbitron',monospace;font-size:clamp(5rem,18vw,12rem);font-weight:900;
+      color:#e50914;line-height:1;
+      text-shadow:0 0 40px rgba(229,9,20,0.9),0 0 120px rgba(229,9,20,0.5);
+      transform:scale(0);transition:transform 0.5s cubic-bezier(0.34,1.56,0.64,1);">T</div>
+  </div>
+  <div id="tfx-name" style="
+    font-family:'Share Tech Mono',monospace;font-size:clamp(0.6rem,2vw,1rem);
+    letter-spacing:0.6em;color:rgba(255,255,255,0.7);text-transform:uppercase;
+    margin-top:12px;opacity:0;transition:opacity 0.4s 0.5s;">OXIBH FLIX</div>
+</div>
+
+<script>
+function toxibhFlixTransition(e) {
+  e.preventDefault();
+  const overlay = document.getElementById('toxibhflix-overlay');
+  const letter  = document.getElementById('tfx-letter');
+  const name    = document.getElementById('tfx-name');
+  overlay.style.display = 'flex';
+  requestAnimationFrame(() => {
+    overlay.style.opacity = '1';
+    setTimeout(() => { letter.style.transform = 'scale(1)'; }, 50);
+    setTimeout(() => { name.style.opacity = '1'; }, 500);
+    setTimeout(() => { window.location.href = '/movies'; }, 1200);
+  });
+}
 </script>
 </body>
 </html>
