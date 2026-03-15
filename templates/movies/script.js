@@ -347,8 +347,8 @@ function loadPlayer(movieId, startSeconds = 0) {
   const container = document.getElementById('player-container');
   if (!container) return;
 
-  // ── Route through server proxy so VPN IP is used, not user's IP ──
-  let src = `/proxy/player/${movieId}?color=e50914&autoPlay=true`;
+  // ── Load directly via Vidking (Iframe avoids CORS) ──
+  let src = `https://www.vidking.net/embed/movie/${movieId}?color=e50914&autoPlay=true`;
   if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
 
   container.innerHTML = `
@@ -360,7 +360,6 @@ function loadPlayer(movieId, startSeconds = 0) {
       allowfullscreen
       allow="autoplay; fullscreen; picture-in-picture"
       referrerpolicy="no-referrer-when-downgrade"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
       title="Movie Player">
     </iframe>`;
 
@@ -369,5 +368,5 @@ function loadPlayer(movieId, startSeconds = 0) {
 
   showToast(startSeconds > 5
     ? `▶ Resuming from ${formatTime(startSeconds)}`
-    : '▶ Starting playback — routed via server');
+    : '▶ Starting playback');
 }
