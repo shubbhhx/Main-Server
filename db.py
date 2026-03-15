@@ -1,9 +1,42 @@
-import sqlite3
 import os
+import re
+import sqlite3
 import bcrypt
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database', 'toxibh.db')
+def _is_writable_dir(path):
+    try:
+        os.makedirs(path, exist_ok=True)
+        test_file = os.path.join(path, '.toxibh_write_test')
+        with open(test_file, 'w', encoding='utf-8') as f:
+            f.write('ok')
+        os.remove(test_file)
+        return True
+    except Exception:
+        return False
+
+
+def _detect_data_root():
+    env_path = os.environ.get('TOXIBH_DATA_ROOT', '').strip()
+    candidates = []
+    if env_path:
+        candidates.append(env_path)
+    candidates.append(os.path.abspath(os.path.join(os.sep, 'data')))
+    candidates.append(os.path.join(os.path.expanduser('~'), 'data'))
+
+    for candidate in candidates:
+        if _is_writable_dir(candidate):
+            return candidate
+
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+
+
+DATA_ROOT = _detect_data_root()
+DB_DIR = os.path.join(DATA_ROOT, 'databases')
+
+ADMIN_DB_PATH = os.path.join(DB_DIR, 'admin.db')
+FLIX_DB_PATH = os.path.join(DB_DIR, 'flix.db')
+ANALYTICS_DB_PATH = os.path.join(DB_DIR, 'analytics.db')
 
 DEFAULT_MOVIE_PROFILES = [
     ('profile_shubham', 'local_user', 'Shubham', '🤖'),
@@ -12,17 +45,185 @@ DEFAULT_MOVIE_PROFILES = [
     ('profile_action', 'local_user', 'Action Fan', '⚡'),
 ]
 
-def get_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+DB_NAME_TO_PATH = {
+    'admin': ADMIN_DB_PATH,
+    'flix': FLIX_DB_PATH,
+    'analytics': ANALYTICS_DB_PATH,
+}
+
+TABLE_TO_DB = {
+    'admins': 'admin',
+    'visitors': 'admin',
+    'messages': 'admin',
+    'notes': 'admin',
+    'passwords': 'admin',
+    'vault_files': 'admin',
+    'chatbot_logs': 'admin',
+    'game_scores': 'admin',
+    'settings': 'admin',
+
+    'users': 'flix',
+    'profiles': 'flix',
+    'watch_history': 'flix',
+    'resume_progress': 'flix',
+    'watchlist': 'flix',
+
+    'daily_visitors': 'analytics',
+    'request_logs': 'analytics',
+    'error_logs': 'analytics',
+}
+
+
+def _ensure_dirs():
+    os.makedirs(DB_DIR, exist_ok=True)
+
+
+def get_db(db_name='admin'):
+    _ensure_dirs()
+    db_path = DB_NAME_TO_PATH.get(db_name, ADMIN_DB_PATH)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
-    conn = get_db()
+
+def _extract_table_name(query):
+    q = (query or '').lower()
+    patterns = [
+        r'\binto\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'\bupdate\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'\bfrom\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'\bjoin\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, q)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _resolve_db_name(query, db_name=None):
+    if db_name:
+        return db_name
+    table_name = _extract_table_name(query)
+    return TABLE_TO_DB.get(table_name, 'admin')
+
+
+def _init_admin_db():
+    conn = get_db('admin')
     c = conn.cursor()
 
-    # ToxibhFlix users
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS admins (
+            id TEXT PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS visitors (
+            id TEXT PRIMARY KEY,
+            ip TEXT,
+            user_agent TEXT,
+            referrer TEXT,
+            page TEXT,
+            country TEXT,
+            time TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            email TEXT,
+            message TEXT,
+            time TEXT,
+            read INTEGER DEFAULT 0,
+            ip TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notes (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            content TEXT,
+            color TEXT,
+            time TEXT,
+            updated TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS passwords (
+            id TEXT PRIMARY KEY,
+            site TEXT,
+            username TEXT,
+            password TEXT,
+            category TEXT,
+            notes TEXT,
+            time TEXT,
+            updated TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS vault_files (
+            id TEXT PRIMARY KEY,
+            filename TEXT NOT NULL,
+            filetype TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            upload_date TEXT NOT NULL,
+            original_name TEXT,
+            mimetype TEXT,
+            size INTEGER
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS chatbot_logs (
+            id TEXT PRIMARY KEY,
+            user_message TEXT,
+            ai_response TEXT,
+            time TEXT,
+            ip TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS game_scores (
+            id TEXT PRIMARY KEY,
+            player_name TEXT,
+            game_name TEXT,
+            score INTEGER,
+            timestamp TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+
+    c.execute("SELECT * FROM admins WHERE username = 'toxibh-shubh@6969'")
+    if not c.fetchone():
+        hashed = bcrypt.hashpw(b'toxibh@6967', bcrypt.gensalt()).decode('utf-8')
+        c.execute(
+            "INSERT INTO admins (id, username, password_hash) VALUES (?, ?, ?)",
+            ('admin_1', 'toxibh-shubh@6969', hashed)
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def _init_flix_db():
+    conn = get_db('flix')
+    c = conn.cursor()
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -31,7 +232,6 @@ def init_db():
         )
     ''')
 
-    # ToxibhFlix profiles
     c.execute('''
         CREATE TABLE IF NOT EXISTS profiles (
             id TEXT PRIMARY KEY,
@@ -44,7 +244,6 @@ def init_db():
         )
     ''')
 
-    # ToxibhFlix watch history
     c.execute('''
         CREATE TABLE IF NOT EXISTS watch_history (
             id TEXT PRIMARY KEY,
@@ -59,7 +258,6 @@ def init_db():
         )
     ''')
 
-    # ToxibhFlix resume progress (one row per profile/content)
     c.execute('''
         CREATE TABLE IF NOT EXISTS resume_progress (
             profile_id TEXT NOT NULL,
@@ -78,7 +276,6 @@ def init_db():
         )
     ''')
 
-    # ToxibhFlix watchlist (one row per profile/content)
     c.execute('''
         CREATE TABLE IF NOT EXISTS watchlist (
             profile_id TEXT NOT NULL,
@@ -95,126 +292,73 @@ def init_db():
     c.execute('CREATE INDEX IF NOT EXISTS idx_watch_history_profile_time ON watch_history(profile_id, last_watched DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_resume_profile_updated ON resume_progress(profile_id, updated_at DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_profile_added ON watchlist(profile_id, added_at DESC)')
-    
-    # Admins
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS admins (
-            id TEXT PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
-        )
-    ''')
-    
-    # Visitors
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS visitors (
-            id TEXT PRIMARY KEY,
-            ip TEXT,
-            user_agent TEXT,
-            referrer TEXT,
-            time TEXT,
-            page TEXT
-        )
-    ''')
-    
-    # Messages
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            name TEXT,
-            email TEXT,
-            message TEXT,
-            time TEXT,
-            read INTEGER DEFAULT 0,
-            ip TEXT
-        )
-    ''')
-    
-    # Notes
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS notes (
-            id TEXT PRIMARY KEY,
-            title TEXT,
-            content TEXT,
-            color TEXT,
-            time TEXT,
-            updated TEXT
-        )
-    ''')
-    
-    # Passwords
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS passwords (
-            id TEXT PRIMARY KEY,
-            site TEXT,
-            username TEXT,
-            password TEXT,
-            category TEXT,
-            notes TEXT,
-            time TEXT,
-            updated TEXT
-        )
-    ''')
-    
-    # Files
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS files (
-            id TEXT PRIMARY KEY,
-            original_name TEXT,
-            filename TEXT,
-            type TEXT,
-            mimetype TEXT,
-            size INTEGER,
-            path TEXT,
-            time TEXT
-        )
-    ''')
-    
-    # Chatbot Logs
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS chatbot_logs (
-            id TEXT PRIMARY KEY,
-            user_message TEXT,
-            ai_response TEXT,
-            time TEXT,
-            ip TEXT
-        )
-    ''')
-    
-    # Game Scores
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS game_scores (
-            id TEXT PRIMARY KEY,
-            player_name TEXT,
-            game_name TEXT,
-            score INTEGER,
-            timestamp TEXT
-        )
-    ''')
-    
-    # Create default admin if not exists
-    c.execute("SELECT * FROM admins WHERE username = 'toxibh-shubh@6969'")
-    if not c.fetchone():
-        hashed = bcrypt.hashpw(b'toxibh@6967', bcrypt.gensalt()).decode('utf-8')
-        c.execute("INSERT INTO admins (id, username, password_hash) VALUES (?, ?, ?)", 
-                  ('admin_1', 'toxibh-shubh@6969', hashed))
 
-    # Create default local user and movie profiles if they don't exist
     now = datetime.utcnow().isoformat()
-    c.execute("INSERT OR IGNORE INTO users (id, username, created_at) VALUES (?, ?, ?)",
-              ('local_user', 'Local User', now))
+    c.execute(
+        "INSERT OR IGNORE INTO users (id, username, created_at) VALUES (?, ?, ?)",
+        ('local_user', 'Local User', now)
+    )
 
     for profile_id, user_id, profile_name, avatar in DEFAULT_MOVIE_PROFILES:
         c.execute('''
             INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, created_at)
             VALUES (?, ?, ?, ?, ?)
         ''', (profile_id, user_id, profile_name, avatar, now))
-        
+
     conn.commit()
     conn.close()
 
-def execute_query(query, args=()):
-    conn = get_db()
+
+def _init_analytics_db():
+    conn = get_db('analytics')
+    c = conn.cursor()
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS daily_visitors (
+            visit_date TEXT PRIMARY KEY,
+            total_count INTEGER NOT NULL DEFAULT 0
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS request_logs (
+            id TEXT PRIMARY KEY,
+            method TEXT,
+            path TEXT,
+            status_code INTEGER,
+            response_ms REAL,
+            ip TEXT,
+            user_agent TEXT,
+            created_at TEXT
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS error_logs (
+            id TEXT PRIMARY KEY,
+            path TEXT,
+            method TEXT,
+            status_code INTEGER,
+            error_message TEXT,
+            ip TEXT,
+            created_at TEXT
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+
+def init_db():
+    _ensure_dirs()
+    _init_admin_db()
+    _init_flix_db()
+    _init_analytics_db()
+
+
+def execute_query(query, args=(), db_name=None):
+    resolved_db = _resolve_db_name(query, db_name=db_name)
+    conn = get_db(resolved_db)
     try:
         c = conn.cursor()
         c.execute(query, args)
@@ -226,8 +370,10 @@ def execute_query(query, args=()):
     finally:
         conn.close()
 
-def fetch_all(query, args=()):
-    conn = get_db()
+
+def fetch_all(query, args=(), db_name=None):
+    resolved_db = _resolve_db_name(query, db_name=db_name)
+    conn = get_db(resolved_db)
     try:
         c = conn.cursor()
         c.execute(query, args)
@@ -238,8 +384,10 @@ def fetch_all(query, args=()):
     finally:
         conn.close()
 
-def fetch_one(query, args=()):
-    conn = get_db()
+
+def fetch_one(query, args=(), db_name=None):
+    resolved_db = _resolve_db_name(query, db_name=db_name)
+    conn = get_db(resolved_db)
     try:
         c = conn.cursor()
         c.execute(query, args)
@@ -250,3 +398,22 @@ def fetch_one(query, args=()):
         return None
     finally:
         conn.close()
+
+
+def set_setting(key, value):
+    return execute_query(
+        '''
+        INSERT INTO settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        ''',
+        (key, value),
+        db_name='admin'
+    )
+
+
+def get_setting(key, default=None):
+    row = fetch_one('SELECT value FROM settings WHERE key = ?', (key,), db_name='admin')
+    if not row:
+        return default
+    return row.get('value', default)

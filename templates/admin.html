@@ -17,6 +17,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:16px}
 body{background:var(--dark);color:#c8e8ff;font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;cursor:none}
+.admin-panel{font-size:1.15rem}
 
 /* ── CURSOR ── */
 #cur{position:fixed;width:10px;height:10px;background:var(--c);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);box-shadow:var(--glow);transition:width .15s,height .15s,background .15s}
@@ -225,7 +226,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
 @media(max-width:700px){#sb{transform:translateX(-100%)}#sb.open{transform:translateX(0)}#main{margin-left:0}.fr{grid-template-columns:1fr}}
 </style>
 </head>
-<body>
+<body class="admin-panel">
 
 <div id="cur"></div><div id="cur-r"></div>
 
@@ -648,7 +649,7 @@ async function pollMetrics() {
   // Only poll if dashboard is visible
   if (document.getElementById('pg-dash').classList.contains('on')) {
     try {
-      const sys = await api('GET', '/api/metrics/system');
+      const sys = await api('GET', '/api/admin/system');
       if (sys.cpu !== undefined) {
         document.getElementById('met-cpu').textContent = sys.cpu.toFixed(1) + '%';
         document.getElementById('met-ram').textContent = sys.ram.toFixed(1) + '%';
@@ -675,7 +676,7 @@ async function pollMetrics() {
     } catch (e) { console.error('Metrics fetch error:', e); }
   }
   
-  metricsTimer = setTimeout(pollMetrics, 5000); // 5 sec interval
+  metricsTimer = setTimeout(pollMetrics, 3000);
 }
 
 // ── VISITORS ──
@@ -723,7 +724,8 @@ async function loadNotes(){
 async function addNote(){
   const t=document.getElementById('n-t').value.trim(),b=document.getElementById('n-b').value.trim(),c=document.getElementById('n-c').value;
   if(!b){toast('Content required','err');return}
-  await api('POST','/api/notes',{title:t,content:b,color:c});
+  const r=await api('POST','/api/notes',{title:t,content:b,color:c});
+  if(r.error){toast(r.error,'err');return}
   document.getElementById('n-t').value='';document.getElementById('n-b').value='';
   toast('Note saved ✓','ok');loadNotes();
 }
@@ -768,6 +770,7 @@ async function addPw(){
   const s=document.getElementById('pw-s').value.trim(),u=document.getElementById('pw-u').value.trim(),p=document.getElementById('pw-p').value.trim(),c=document.getElementById('pw-c').value,n=document.getElementById('pw-n').value.trim();
   if(!s||!p){toast('Site and password required','err');return}
   const r=await api('POST','/api/passwords',{site:s,username:u,password:p,category:c,notes:n});
+  if(r.error){toast(r.error,'err');return}
   allPw.unshift(r);
   ['pw-s','pw-u','pw-p','pw-n'].forEach(id=>document.getElementById(id).value='');
   toast('Stored 🔐','ok');renderPw();
@@ -807,6 +810,7 @@ function empty(t){return `<div style="padding:18px;font-family:'Share Tech Mono'
 
 // ── TOXIBHFLIX MANAGER ──
 let _flixProfiles = [];
+let _removedProfileIds = [];
 
 async function loadFlix() {
   // Load API key
@@ -815,6 +819,7 @@ async function loadFlix() {
   // Load profiles
   const profiles = await api('GET', '/api/movies/profiles');
   _flixProfiles = profiles || [];
+  _removedProfileIds = [];
   renderProfileEditor();
 }
 
@@ -826,37 +831,75 @@ function renderProfileEditor() {
       <div class="fr full" style="margin-bottom:8px">
         <div class="fg">
           <label class="fl">EMOJI</label>
-          <input class="fi" style="font-size:1.4rem;text-align:center" value="${p.emoji}" id="fe-${i}" maxlength="2">
+          <input class="fi" style="font-size:1.4rem;text-align:center" value="${p.emoji || '👤'}" id="fe-${i}" maxlength="2">
         </div>
       </div>
       <div class="fg" style="margin-bottom:8px">
         <label class="fl">DISPLAY NAME</label>
-        <input class="fi" value="${p.name}" id="fn-${i}">
+        <input class="fi" value="${p.name || ''}" id="fn-${i}">
       </div>
       <button class="ta ta-d" onclick="removeProfile(${i})" style="width:100%;padding:5px">REMOVE</button>
     </div>`).join('');
 }
 
 function addProfileSlot() {
-  _flixProfiles.push({ name: 'New Profile', emoji: '👤' });
+  _flixProfiles.push({ id: null, name: 'New Profile', emoji: '👤' });
   renderProfileEditor();
 }
 
 function removeProfile(idx) {
   if (!confirm('Remove this profile?')) return;
+  const target = _flixProfiles[idx];
+  if (target && target.id) _removedProfileIds.push(target.id);
   _flixProfiles.splice(idx, 1);
   renderProfileEditor();
 }
 
 async function saveProfiles() {
-  // Read current values from inputs
-  _flixProfiles = _flixProfiles.map((p, i) => ({
-    emoji: (document.getElementById('fe-' + i)?.value || p.emoji).trim(),
-    name:  (document.getElementById('fn-' + i)?.value || p.name).trim(),
-  }));
-  const r = await api('POST', '/api/movies/profiles', _flixProfiles);
-  if (r.success) toast('Profiles saved ✓', 'ok');
-  else toast('Save failed', 'err');
+  const edited = _flixProfiles.map((p, i) => ({
+    id: p.id || null,
+    emoji: (document.getElementById('fe-' + i)?.value || p.emoji || '👤').trim() || '👤',
+    name:  (document.getElementById('fn-' + i)?.value || p.name || '').trim(),
+  })).filter(p => p.name);
+
+  if (!edited.length) {
+    toast('At least one profile is required', 'err');
+    return;
+  }
+
+  for (const profileId of _removedProfileIds) {
+    const del = await api('POST', '/api/admin/profile/delete', { profile_id: profileId });
+    if (!del.success) {
+      toast(del.error || 'Delete failed', 'err');
+      return;
+    }
+  }
+
+  for (const p of edited) {
+    if (p.id) {
+      const upd = await api('POST', '/api/admin/profile/update', {
+        profile_id: p.id,
+        profile_name: p.name,
+        avatar: p.emoji
+      });
+      if (!upd.success) {
+        toast(upd.error || 'Update failed', 'err');
+        return;
+      }
+    } else {
+      const crt = await api('POST', '/api/admin/profile/create', {
+        profile_name: p.name,
+        avatar: p.emoji
+      });
+      if (!crt.success) {
+        toast(crt.error || 'Create failed', 'err');
+        return;
+      }
+    }
+  }
+
+  toast('Profiles saved ✓', 'ok');
+  await loadFlix();
 }
 
 async function saveApiKey() {

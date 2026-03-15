@@ -4,6 +4,7 @@ database/
 
 # Runtime data
 data/
+logs/
 
 # Flask sessions
 flask_session/

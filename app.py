@@ -3,14 +3,16 @@
 #  Run:  python app.py
 # ═══════════════════════════════════════════════════════════
 
-import os, uuid, bcrypt, mimetypes, json, time, re
+import os, uuid, bcrypt, mimetypes, json, time, re, logging
 import urllib.request, urllib.error
 import requests as req_session   # for Vidking proxy (streaming)
 from datetime import datetime, timedelta
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 from flask import (Flask, request, jsonify, session,
                    send_from_directory, abort, g, redirect, Response)
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
@@ -35,11 +37,24 @@ db.init_db()
 
 # ── PATHS ─────────────────────────────────────────────────
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-PHOTOS_DIR  = os.path.join(BASE_DIR, 'static', 'photos')
-PDFS_DIR    = os.path.join(BASE_DIR, 'static', 'pdfs')
+DATA_ROOT   = db.DATA_ROOT
+DB_DIR      = os.path.join(DATA_ROOT, 'databases')
+VAULT_DIR   = os.path.join(DATA_ROOT, 'vault')
+PHOTOS_DIR  = os.path.join(VAULT_DIR, 'photos')
+PDFS_DIR    = os.path.join(VAULT_DIR, 'pdfs')
+LOGS_DIR    = os.path.join(DATA_ROOT, 'logs')
+SERVER_LOG  = os.path.join(LOGS_DIR, 'server.log')
 
-for d in [PHOTOS_DIR, PDFS_DIR]:
+for d in [DB_DIR, PHOTOS_DIR, PDFS_DIR, LOGS_DIR]:
     os.makedirs(d, exist_ok=True)
+
+logger = logging.getLogger('toxibh-control-center')
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    file_handler = RotatingFileHandler(SERVER_LOG, maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s'))
+    logger.addHandler(file_handler)
+    logger.propagate = False
 
 # ── TORRENT AUTO-CLEANUP (1-day TTL) ─────────────────────────
 import threading, shutil
@@ -79,6 +94,23 @@ _cleanup_thread.start()
 SECRET_KEY   = 'toxibh-shubh@6969'
 ALLOWED_IMG  = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
 ALLOWED_PDF  = {'application/pdf'}
+DEFAULT_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4'
+
+def log_admin_action(action, detail=''):
+    actor = session.get('admin') and 'admin' or 'guest'
+    logger.info(f'ADMIN_ACTION | actor={actor} | action={action} | detail={detail}')
+
+def _get_tmdb_key():
+    saved = (db.get_setting('tmdb_key') or '').strip()
+    if saved:
+        return saved
+    return DEFAULT_TMDB_KEY
+
+def _set_tmdb_key(key):
+    value = (key or '').strip()
+    if value:
+        return db.set_setting('tmdb_key', value)
+    return False
 
 # ── AUTH DECORATOR ────────────────────────────────────────
 def admin_required(f):
@@ -88,6 +120,23 @@ def admin_required(f):
             return jsonify({'error': 'Unauthorized'}), 401
         return f(*args, **kwargs)
     return decorated
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(ex):
+    if isinstance(ex, HTTPException):
+        return ex
+
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
+    now_iso = datetime.utcnow().isoformat()
+    logger.exception(f'SERVER_ERROR | {request.method} {request.path} | ip={ip} | error={str(ex)}')
+    db.execute_query('''
+        INSERT INTO error_logs (id, path, method, status_code, error_message, ip, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (str(uuid.uuid4()), request.path, request.method, 500, str(ex), ip, now_iso), db_name='analytics')
+
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Internal server error'}), 500
+    return 'Internal server error', 500
 
 # ── SERVER METRICS TRACKING ──────────────────────────────
 server_metrics = {
@@ -115,6 +164,28 @@ def after_request_tracking(response):
         server_metrics['total_response_time'] += duration
         if response.status_code >= 400:
             server_metrics['error_count'] += 1
+
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
+        ua = request.headers.get('User-Agent', 'unknown')
+        now_iso = datetime.utcnow().isoformat()
+
+        db.execute_query('''
+            INSERT INTO request_logs (id, method, path, status_code, response_ms, ip, user_agent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            str(uuid.uuid4()), request.method, request.path, response.status_code,
+            round(duration * 1000, 2), ip, ua, now_iso
+        ), db_name='analytics')
+
+        if response.status_code >= 400:
+            db.execute_query('''
+                INSERT INTO error_logs (id, path, method, status_code, error_message, ip, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                str(uuid.uuid4()), request.path, request.method, response.status_code,
+                response.status, ip, now_iso
+            ), db_name='analytics')
+            logger.error(f"API_ERROR | {request.method} {request.path} | status={response.status_code} | ip={ip}")
     return response
 
 # ── VISITOR TRACKER ───────────────────────────────────────
@@ -125,12 +196,24 @@ def track_visitor():
         ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
         ua = request.headers.get('User-Agent', 'unknown')
         ref = request.headers.get('Referer', 'direct')
+        country = (
+            request.headers.get('CF-IPCountry')
+            or request.headers.get('X-Country-Code')
+            or request.headers.get('X-Country')
+            or 'unknown'
+        )
         time_now = datetime.utcnow().isoformat()
+        day_key = datetime.utcnow().date().isoformat()
         
         db.execute_query('''
-            INSERT INTO visitors (id, ip, user_agent, referrer, time, page)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (v_id, ip, ua, ref, time_now, request.path))
+            INSERT INTO visitors (id, ip, user_agent, referrer, page, country, time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (v_id, ip, ua, ref, request.path, country, time_now))
+        db.execute_query('''
+            INSERT INTO daily_visitors (visit_date, total_count)
+            VALUES (?, 1)
+            ON CONFLICT(visit_date) DO UPDATE SET total_count = total_count + 1
+        ''', (day_key,), db_name='analytics')
 
 # ══════════════════════════════════════════════════════════
 #  STATIC FILES — Portfolio + Admin
@@ -178,29 +261,6 @@ def movies_static(filename):
     return send_from_directory('templates/movies', filename)
 
 # ── TOXIBHFLIX MANAGEMENT API ─────────────────────────────────────
-MOVIES_CONFIG_FILE = 'movies_config.json'
-
-def _load_movies_config():
-    """Load movies config (profiles + TMDB key) from JSON file."""
-    if os.path.exists(MOVIES_CONFIG_FILE):
-        try:
-            with open(MOVIES_CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
-        'profiles': [
-            {'name': 'Shubham',    'emoji': '🤖'},
-            {'name': 'Chill Mode', 'emoji': '🎮'},
-            {'name': 'Night Owl',  'emoji': '🌙'},
-            {'name': 'Action Fan', 'emoji': '⚡'},
-        ],
-        'tmdb_key': 'e1ab6c29240869d03ce20472b94dd2e4'
-    }
-
-def _save_movies_config(data):
-    with open(MOVIES_CONFIG_FILE, 'w') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def _normalize_profile(profile_row):
     if not profile_row:
@@ -257,8 +317,12 @@ def api_movies_profiles_get():
     if rows:
         return jsonify([_normalize_profile(r) for r in rows])
 
-    cfg = _load_movies_config()
-    defaults = cfg.get('profiles', [])
+    defaults = [
+        {'name': 'Shubham', 'emoji': '🤖'},
+        {'name': 'Chill Mode', 'emoji': '🎮'},
+        {'name': 'Night Owl', 'emoji': '🌙'},
+        {'name': 'Action Fan', 'emoji': '⚡'},
+    ]
     now = datetime.utcnow().isoformat()
     for p in defaults:
         name = (p.get('name') or '').strip()
@@ -308,10 +372,78 @@ def api_movies_profiles_save():
                 'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
                 (str(uuid.uuid4()), 'local_user', profile_name, avatar, now)
             )
+    log_admin_action('profiles_bulk_save', f'count={len(data)}')
+    return jsonify({'success': True})
 
-    cfg = _load_movies_config()
-    cfg['profiles'] = [{'name': (p.get('name') or '').strip(), 'emoji': p.get('emoji') or '👤'} for p in data if (p.get('name') or '').strip()]
-    _save_movies_config(cfg)
+@app.route('/api/admin/profile/create', methods=['POST'])
+@admin_required
+def api_admin_profile_create():
+    data = request.get_json(silent=True) or {}
+    profile_name = (data.get('name') or data.get('profile_name') or '').strip()
+    avatar = (data.get('emoji') or data.get('avatar') or '👤').strip() or '👤'
+
+    if not profile_name:
+        return jsonify({'error': 'profile_name is required'}), 400
+
+    existing = db.fetch_one(
+        'SELECT id FROM profiles WHERE user_id = ? AND lower(profile_name) = lower(?)',
+        ('local_user', profile_name)
+    )
+    if existing:
+        return jsonify({'error': 'Profile already exists'}), 409
+
+    profile_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+    db.execute_query(
+        'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
+        (profile_id, 'local_user', profile_name, avatar, created_at)
+    )
+    row = db.fetch_one('SELECT id, profile_name, avatar, created_at FROM profiles WHERE id = ?', (profile_id,))
+    log_admin_action('profile_create', f'id={profile_id},name={profile_name}')
+    return jsonify({'success': True, 'profile': _normalize_profile(row)})
+
+@app.route('/api/admin/profile/update', methods=['POST'])
+@admin_required
+def api_admin_profile_update():
+    data = request.get_json(silent=True) or {}
+    profile_id = (data.get('id') or data.get('profile_id') or '').strip()
+    profile_name = (data.get('name') or data.get('profile_name') or '').strip()
+    avatar = (data.get('emoji') or data.get('avatar') or '👤').strip() or '👤'
+
+    if not profile_id:
+        return jsonify({'error': 'profile_id is required'}), 400
+    if not profile_name:
+        return jsonify({'error': 'profile_name is required'}), 400
+
+    existing = db.fetch_one('SELECT id FROM profiles WHERE id = ?', (profile_id,))
+    if not existing:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    db.execute_query(
+        'UPDATE profiles SET profile_name = ?, avatar = ? WHERE id = ?',
+        (profile_name, avatar, profile_id)
+    )
+    row = db.fetch_one('SELECT id, profile_name, avatar, created_at FROM profiles WHERE id = ?', (profile_id,))
+    log_admin_action('profile_update', f'id={profile_id},name={profile_name}')
+    return jsonify({'success': True, 'profile': _normalize_profile(row)})
+
+@app.route('/api/admin/profile/delete', methods=['POST'])
+@admin_required
+def api_admin_profile_delete():
+    data = request.get_json(silent=True) or {}
+    profile_id = (data.get('id') or data.get('profile_id') or '').strip()
+    if not profile_id:
+        return jsonify({'error': 'profile_id is required'}), 400
+
+    existing = db.fetch_one('SELECT id FROM profiles WHERE id = ?', (profile_id,))
+    if not existing:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    db.execute_query('DELETE FROM watch_history WHERE profile_id = ?', (profile_id,))
+    db.execute_query('DELETE FROM resume_progress WHERE profile_id = ?', (profile_id,))
+    db.execute_query('DELETE FROM watchlist WHERE profile_id = ?', (profile_id,))
+    db.execute_query('DELETE FROM profiles WHERE id = ?', (profile_id,))
+    log_admin_action('profile_delete', f'id={profile_id}')
     return jsonify({'success': True})
 
 @app.route('/api/movies/resume-progress', methods=['POST'])
@@ -556,26 +688,24 @@ def api_movies_recommendations():
 @app.route('/api/movies/config', methods=['GET'])
 @admin_required
 def api_movies_config_get():
-    cfg = _load_movies_config()
-    return jsonify({'tmdb_key': cfg.get('tmdb_key', '')})
+    return jsonify({'tmdb_key': _get_tmdb_key()})
 
 @app.route('/api/movies/config', methods=['POST'])
 @admin_required
 def api_movies_config_save():
-    data = request.get_json()
-    cfg = _load_movies_config()
-    if 'tmdb_key' in data:
-        cfg['tmdb_key'] = data['tmdb_key'].strip()
-    _save_movies_config(cfg)
-    # Also update script.js to inject key
+    data = request.get_json(silent=True) or {}
+    key = (data.get('tmdb_key') or '').strip()
+    if not key:
+        return jsonify({'error': 'tmdb_key is required'}), 400
+    _set_tmdb_key(key)
+    log_admin_action('tmdb_key_updated', 'key_updated')
     return jsonify({'success': True})
 
 @app.route('/api/movies/tmdb-status', methods=['GET'])
 @admin_required
 def api_movies_tmdb_status():
     import urllib.request, urllib.error
-    cfg = _load_movies_config()
-    key = cfg.get('tmdb_key', '')
+    key = _get_tmdb_key()
     if not key:
         return jsonify({'status': 'no_key', 'message': 'No TMDB API key configured'})
     try:
@@ -598,8 +728,7 @@ TMDB_CACHE_TTL = 300  # 5 minutes
 
 def _tmdb_fetch(path, params=None):
     """Fetch from TMDB using server's IP, with caching."""
-    cfg = _load_movies_config()
-    key = cfg.get('tmdb_key', '')
+    key = _get_tmdb_key()
     if not key:
         abort(500, description="TMDB API key not configured")
         
@@ -990,7 +1119,7 @@ def stats():
         messages = db.fetch_all("SELECT * FROM messages")
         notes = db.fetch_one("SELECT COUNT(*) as c FROM notes")['c']
         passwords = db.fetch_one("SELECT COUNT(*) as c FROM passwords")['c']
-        files = db.fetch_all("SELECT type FROM files")
+        files = db.fetch_all("SELECT filetype FROM vault_files")
         
         today = datetime.utcnow().date().isoformat()
         today_vis = sum(1 for v in visitors if (v.get('time') or '')[:10] == today)
@@ -1019,8 +1148,8 @@ def stats():
             'totalNotes': notes,
             'totalPasswords': passwords,
             'totalFiles': len(files),
-            'photos': sum(1 for f in files if f.get('type') == 'photo'),
-            'pdfs': sum(1 for f in files if f.get('type') == 'pdf'),
+            'photos': sum(1 for f in files if f.get('filetype') == 'photo'),
+            'pdfs': sum(1 for f in files if f.get('filetype') == 'pdf'),
             'visitorChart': chart
         })
     except Exception as e:
@@ -1029,19 +1158,17 @@ def stats():
 # ══════════════════════════════════════════════════════════
 #  REAL-TIME METRICS
 # ══════════════════════════════════════════════════════════
-@app.route('/api/metrics/system')
-@admin_required
-def metric_system():
+def _system_metrics_payload():
     try:
         mem = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage(DATA_ROOT)
         net = psutil.net_io_counters()
         uptime_seconds = time.time() - psutil.boot_time()
         
         h = int(uptime_seconds // 3600)
         m = int((uptime_seconds % 3600) // 60)
         
-        return jsonify({
+        return {
             'cpu': psutil.cpu_percent(interval=0.1),
             'ram': mem.percent,
             'disk': disk.percent,
@@ -1049,9 +1176,26 @@ def metric_system():
             'uptime': f"{h}h {m}m",
             'net_sent': net.bytes_sent,
             'net_recv': net.bytes_recv
-        })
+        }
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.exception(f'SYSTEM_METRICS_ERROR | {str(e)}')
+        return {'error': str(e)}
+
+@app.route('/api/admin/system')
+@admin_required
+def api_admin_system_metrics():
+    payload = _system_metrics_payload()
+    if payload.get('error'):
+        return jsonify(payload), 500
+    return jsonify(payload)
+
+@app.route('/api/metrics/system')
+@admin_required
+def metric_system():
+    payload = _system_metrics_payload()
+    if payload.get('error'):
+        return jsonify(payload), 500
+    return jsonify(payload)
 
 @app.route('/api/metrics/server')
 @admin_required
@@ -1111,6 +1255,7 @@ def get_visitors():
 @admin_required
 def clear_visitors():
     db.execute_query("DELETE FROM visitors")
+    log_admin_action('clear_visitors', 'all_visitor_logs_deleted')
     return jsonify({'success': True})
 
 # ══════════════════════════════════════════════════════════
@@ -1193,6 +1338,7 @@ def add_note():
         INSERT INTO notes (id, title, content, color, time, updated)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (n_id, title, content, color, time_now, time_now))
+    log_admin_action('add_note', f'id={n_id}')
     
     return jsonify({'id': n_id, 'title': title, 'content': content, 
                     'color': color, 'time': time_now, 'updated': time_now})
@@ -1217,6 +1363,7 @@ def update_note(note_id):
         
         query = f"UPDATE notes SET {', '.join(updates)} WHERE id = ?"
         db.execute_query(query, tuple(args))
+        log_admin_action('update_note', f'id={note_id}')
         
     return jsonify({'success': True})
 
@@ -1224,6 +1371,7 @@ def update_note(note_id):
 @admin_required
 def del_note(note_id):
     db.execute_query("DELETE FROM notes WHERE id = ?", (note_id,))
+    log_admin_action('delete_note', f'id={note_id}')
     return jsonify({'success': True})
 
 # ══════════════════════════════════════════════════════════
@@ -1253,6 +1401,7 @@ def add_password():
         INSERT INTO passwords (id, site, username, password, category, notes, time, updated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (p_id, site, username, password, category, notes, time_now, time_now))
+    log_admin_action('add_password', f'id={p_id},site={site}')
     
     return jsonify({'id': p_id, 'site': site, 'username': username, 'password': password, 
                     'category': category, 'notes': notes, 'time': time_now})
@@ -1275,6 +1424,7 @@ def update_password(pw_id):
         
         query = f"UPDATE passwords SET {', '.join(updates)} WHERE id = ?"
         db.execute_query(query, tuple(args))
+        log_admin_action('update_password', f'id={pw_id}')
         
     return jsonify({'success': True})
 
@@ -1282,6 +1432,7 @@ def update_password(pw_id):
 @admin_required
 def del_password(pw_id):
     db.execute_query("DELETE FROM passwords WHERE id = ?", (pw_id,))
+    log_admin_action('delete_password', f'id={pw_id}')
     return jsonify({'success': True})
 
 # ══════════════════════════════════════════════════════════
@@ -1312,17 +1463,19 @@ def upload_files():
         
         f_id = str(uuid.uuid4())
         f_type = 'photo' if is_img else 'pdf'
-        path = f"static/{'photos' if is_img else 'pdfs'}/{new_name}"
+        public_path = f"static/{'photos' if is_img else 'pdfs'}/{new_name}"
         time_now = datetime.utcnow().isoformat()
 
         db.execute_query('''
-            INSERT INTO files (id, original_name, filename, type, mimetype, size, path, time)
+            INSERT INTO vault_files (id, filename, filetype, filepath, upload_date, original_name, mimetype, size)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (f_id, file.filename, new_name, f_type, mime, size, path, time_now))
+        ''', (f_id, new_name, f_type, dest, time_now, file.filename, mime, size))
+
+        log_admin_action('upload_file', f'type={f_type},filename={new_name},size={size}')
         
         results.append({
             'id': f_id, 'originalName': file.filename, 'filename': new_name,
-            'type': f_type, 'mimetype': mime, 'size': size, 'path': path, 'time': time_now
+            'type': f_type, 'mimetype': mime, 'size': size, 'path': public_path, 'time': time_now
         })
 
     return jsonify({'success': True, 'files': results})
@@ -1332,20 +1485,39 @@ def upload_files():
 def get_files():
     ftype = request.args.get('type')
     if ftype:
-        files = db.fetch_all("SELECT * FROM files WHERE type = ? ORDER BY time DESC", (ftype,))
+        files = db.fetch_all("SELECT * FROM vault_files WHERE filetype = ? ORDER BY upload_date DESC", (ftype,))
     else:
-        files = db.fetch_all("SELECT * FROM files ORDER BY time DESC")
-    return jsonify(files)
+        files = db.fetch_all("SELECT * FROM vault_files ORDER BY upload_date DESC")
+
+    normalized = []
+    for entry in files:
+        filetype = entry.get('filetype')
+        filename = entry.get('filename')
+        normalized.append({
+            'id': entry.get('id'),
+            'originalName': entry.get('original_name') or filename,
+            'filename': filename,
+            'type': filetype,
+            'mimetype': entry.get('mimetype'),
+            'size': entry.get('size') or 0,
+            'path': f"static/{'photos' if filetype == 'photo' else 'pdfs'}/{filename}",
+            'time': entry.get('upload_date')
+        })
+    return jsonify(normalized)
 
 @app.route('/api/files/<file_id>', methods=['DELETE'])
 @admin_required
 def del_file(file_id):
-    entry = db.fetch_one("SELECT * FROM files WHERE id = ?", (file_id,))
+    entry = db.fetch_one("SELECT * FROM vault_files WHERE id = ?", (file_id,))
     if entry:
-        full = os.path.join(BASE_DIR, entry['path'])
-        try: os.remove(full)
-        except: pass
-        db.execute_query("DELETE FROM files WHERE id = ?", (file_id,))
+        full = entry.get('filepath')
+        try:
+            if full and os.path.exists(full):
+                os.remove(full)
+        except Exception:
+            pass
+        db.execute_query("DELETE FROM vault_files WHERE id = ?", (file_id,))
+        log_admin_action('delete_file', f'id={file_id},filename={entry.get("filename")}')
     return jsonify({'success': True})
 
 # ══════════════════════════════════════════════════════════
