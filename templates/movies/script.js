@@ -160,7 +160,7 @@ async function initIndexPage() {
       renderRow(data.results, id);
     } catch (e) {
       const c = document.getElementById(id);
-      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Failed to load. Check API key.</p>';
+      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
     }
   }));
 
@@ -229,7 +229,7 @@ async function runSearch(query) {
     }
     data.results.forEach(m => grid.appendChild(buildPosterCard(m)));
   } catch (e) {
-    if (grid) grid.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Search failed. Check API key.</p>';
+    if (grid) grid.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
   }
 }
 
@@ -262,7 +262,7 @@ async function initWatchPage() {
     const recs = await tmdb(`/movie/${movieId}/recommendations`);
     renderRow(recs.results.slice(0, 12), 'row-recs');
   } catch (e) {
-    showToast('⚠ Failed to load movie. Check your API key.');
+    showToast('⚠ Server error. Please try again.');
   }
 
   // Resume check
@@ -331,7 +331,8 @@ function loadPlayer(movieId, startSeconds = 0) {
   const container = document.getElementById('player-container');
   if (!container) return;
 
-  let src = `https://www.vidking.net/embed/movie/${movieId}?color=e50914&autoPlay=true`;
+  // ── Route through server proxy so VPN IP is used, not user's IP ──
+  let src = `/proxy/player/${movieId}?color=e50914&autoPlay=true`;
   if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
 
   container.innerHTML = `
@@ -343,6 +344,7 @@ function loadPlayer(movieId, startSeconds = 0) {
       allowfullscreen
       allow="autoplay; fullscreen; picture-in-picture"
       referrerpolicy="no-referrer-when-downgrade"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
       title="Movie Player">
     </iframe>`;
 
@@ -351,5 +353,5 @@ function loadPlayer(movieId, startSeconds = 0) {
 
   showToast(startSeconds > 5
     ? `▶ Resuming from ${formatTime(startSeconds)}`
-    : '▶ Starting playback');
+    : '▶ Starting playback — routed via server');
 }
