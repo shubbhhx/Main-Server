@@ -355,7 +355,7 @@ def _load_movies_config():
             {'name': 'Night Owl',  'emoji': '🌙'},
             {'name': 'Action Fan', 'emoji': '⚡'},
         ],
-        'tmdb_key': ''
+        'tmdb_key': 'e1ab6c29240869d03ce20472b94dd2e4'
     }
 
 def _save_movies_config(data):
@@ -416,6 +416,87 @@ def api_movies_tmdb_status():
     except Exception as ex:
         return jsonify({'status': 'unreachable', 'message': str(ex)})
     return jsonify({'status': 'unknown'})
+
+# ── TMDB PROXY API ────────────────────────────────────────────────
+_TMDB_CACHE = {}
+TMDB_CACHE_TTL = 300  # 5 minutes
+
+def _tmdb_fetch(path, params=None):
+    """Fetch from TMDB using server's IP, with caching."""
+    cfg = _load_movies_config()
+    key = cfg.get('tmdb_key', '')
+    if not key:
+        abort(500, description="TMDB API key not configured")
+        
+    import urllib.parse
+    
+    # Build URL
+    base_url = f"https://api.themoviedb.org/3{path}"
+    query = {'api_key': key, 'language': 'en-US'}
+    if params:
+        query.update(params)
+    
+    url = f"{base_url}?{urllib.parse.urlencode(query)}"
+    
+    # Check cache
+    now = time.time()
+    if url in _TMDB_CACHE:
+        cached = _TMDB_CACHE[url]
+        if now - cached['ts'] < TMDB_CACHE_TTL:
+            return cached['data']
+            
+    # Fetch
+    import urllib.request, urllib.error
+    req = urllib.request.Request(url, headers={'User-Agent': 'ToxibhFlix/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            data = json.loads(res.read())
+            _TMDB_CACHE[url] = {'data': data, 'ts': now}
+            
+            # Basic cleanup of old cache entries
+            if len(_TMDB_CACHE) > 100:
+                expired = [k for k, v in _TMDB_CACHE.items() if now - v['ts'] > TMDB_CACHE_TTL]
+                for k in expired:
+                    _TMDB_CACHE.pop(k, None)
+                    
+            return data
+    except urllib.error.HTTPError as e:
+        abort(e.code, description=f"TMDB API Error: {e.reason}")
+    except Exception as e:
+        abort(502, description=f"Bad Gateway: {str(e)}")
+
+@app.route('/api/tmdb/trending')
+def tmdb_proxy_trending():
+    return jsonify(_tmdb_fetch('/trending/movie/week'))
+
+@app.route('/api/tmdb/popular')
+def tmdb_proxy_popular():
+    return jsonify(_tmdb_fetch('/movie/popular'))
+
+@app.route('/api/tmdb/top-rated')
+def tmdb_proxy_top_rated():
+    return jsonify(_tmdb_fetch('/movie/top_rated'))
+
+@app.route('/api/tmdb/upcoming')
+def tmdb_proxy_upcoming():
+    return jsonify(_tmdb_fetch('/movie/upcoming'))
+
+@app.route('/api/tmdb/search')
+def tmdb_proxy_search():
+    q = request.args.get('q', '')
+    page = request.args.get('page', 1)
+    if not q:
+        return jsonify({'results': []})
+    return jsonify(_tmdb_fetch('/search/movie', {'query': q, 'page': page}))
+
+@app.route('/api/tmdb/movie/<int:movie_id>')
+def tmdb_proxy_movie(movie_id):
+    append = request.args.get('append_to_response', 'credits')
+    return jsonify(_tmdb_fetch(f'/movie/{movie_id}', {'append_to_response': append}))
+
+@app.route('/api/tmdb/movie/<int:movie_id>/recommendations')
+def tmdb_proxy_movie_recommendations(movie_id):
+    return jsonify(_tmdb_fetch(f'/movie/{movie_id}/recommendations'))
 
 # ── ARIA2 TORRENT STREAMING API ────────────────────────────────
 ARIA2_RPC  = os.environ.get('ARIA2_RPC', 'http://localhost:6800/jsonrpc')

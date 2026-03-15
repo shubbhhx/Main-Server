@@ -4,8 +4,6 @@
 // ═══════════════════════════════════════════════════════════
 
 // ── CONFIG ──────────────────────────────────────────────────
-const TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4';
-const TMDB_BASE = 'https://api.themoviedb.org/3';
 const IMG_BASE = 'https://image.tmdb.org/t/p';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -13,19 +11,37 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const _cache = {};
 
 async function tmdb(path, params = {}) {
-  const url = new URL(TMDB_BASE + path);
-  url.searchParams.set('api_key', TMDB_KEY);
-  url.searchParams.set('language', 'en-US');
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const key = url.toString();
-
-  if (_cache[key] && Date.now() - _cache[key].ts < CACHE_TTL) {
-    return _cache[key].data;
+  // Map TMDB path to our server proxy endpoint
+  let url;
+  if (path.startsWith('/trending/movie')) {
+    url = '/api/tmdb/trending';
+  } else if (path === '/movie/popular') {
+    url = '/api/tmdb/popular';
+  } else if (path === '/movie/top_rated') {
+    url = '/api/tmdb/top-rated';
+  } else if (path === '/movie/upcoming') {
+    url = '/api/tmdb/upcoming';
+  } else if (path === '/search/movie') {
+    const q = encodeURIComponent(params.query || '');
+    const page = params.page || 1;
+    url = `/api/tmdb/search?q=${q}&page=${page}`;
+  } else if (path.endsWith('/recommendations')) {
+    const id = path.split('/')[2];
+    url = `/api/tmdb/movie/${id}/recommendations`;
+  } else if (path.startsWith('/movie/')) {
+    const id = path.split('/')[2];
+    url = `/api/tmdb/movie/${id}`;
+  } else {
+    throw new Error(`Unknown TMDB path: ${path}`);
   }
-  const res = await fetch(key);
-  if (!res.ok) throw new Error(`TMDB ${res.status}`);
+
+  if (_cache[url] && Date.now() - _cache[url].ts < CACHE_TTL) {
+    return _cache[url].data;
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
   const data = await res.json();
-  _cache[key] = { data, ts: Date.now() };
+  _cache[url] = { data, ts: Date.now() };
   return data;
 }
 
