@@ -95,6 +95,7 @@ SECRET_KEY   = 'toxibh-shubh@6969'
 ALLOWED_IMG  = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
 ALLOWED_PDF  = {'application/pdf'}
 DEFAULT_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4'
+TMDB_PROXY_WORKER_URL = 'https://snowy-bush-2e58.subhamj422.workers.dev/'
 
 def log_admin_action(action, detail=''):
     actor = session.get('admin') and 'admin' or 'guest'
@@ -252,6 +253,10 @@ def movies_tvshows():
 def movies_watch_tv():
     return send_from_directory('templates/movies', 'watch-tv.html')
 
+@app.route('/profile')
+def profile_dashboard_page():
+    return send_from_directory('templates/movies', 'profile.html')
+
 @app.route('/movies/torrent')
 def movies_torrent():
     return send_from_directory('templates/movies', 'torrent.html')
@@ -259,6 +264,10 @@ def movies_torrent():
 @app.route('/movies/<path:filename>')
 def movies_static(filename):
     return send_from_directory('templates/movies', filename)
+
+@app.route('/js/<path:filename>')
+def root_js_static(filename):
+    return send_from_directory('js', filename)
 
 # ── TOXIBHFLIX MANAGEMENT API ─────────────────────────────────────
 
@@ -335,6 +344,52 @@ def api_movies_profiles_get():
 
     rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
     return jsonify([_normalize_profile(r) for r in rows])
+
+@app.route('/api/profiles', methods=['GET'])
+def api_profiles_get():
+    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    return jsonify([
+        {
+            'id': r.get('id'),
+            'name': r.get('profile_name'),
+            'avatar': r.get('avatar') or '👤',
+            'created_at': r.get('created_at')
+        }
+        for r in rows
+    ])
+
+@app.route('/api/profiles/create', methods=['POST'])
+def api_profiles_create():
+    data = request.get_json(silent=True) or {}
+    profile_name = (data.get('name') or data.get('profile_name') or '').strip()
+    avatar = (data.get('avatar') or data.get('emoji') or '👤').strip() or '👤'
+
+    if not profile_name:
+        return jsonify({'error': 'name is required'}), 400
+
+    existing = db.fetch_one(
+        'SELECT id FROM profiles WHERE user_id = ? AND lower(profile_name) = lower(?)',
+        ('local_user', profile_name)
+    )
+    if existing:
+        return jsonify({'error': 'Profile already exists'}), 409
+
+    profile_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+    db.execute_query(
+        'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
+        (profile_id, 'local_user', profile_name, avatar, created_at)
+    )
+
+    return jsonify({
+        'success': True,
+        'profile': {
+            'id': profile_id,
+            'name': profile_name,
+            'avatar': avatar,
+            'created_at': created_at
+        }
+    })
 
 @app.route('/api/movies/profile/resolve', methods=['POST'])
 def api_movies_profile_resolve():
@@ -704,12 +759,13 @@ def api_movies_config_save():
 @app.route('/api/movies/tmdb-status', methods=['GET'])
 @admin_required
 def api_movies_tmdb_status():
-    import urllib.request, urllib.error
+    import urllib.request, urllib.error, urllib.parse
     key = _get_tmdb_key()
     if not key:
         return jsonify({'status': 'no_key', 'message': 'No TMDB API key configured'})
     try:
-        url = f'https://api.themoviedb.org/3/configuration?api_key={key}'
+        target_url = f'https://api.themoviedb.org/3/configuration?api_key={key}'
+        url = f"{TMDB_PROXY_WORKER_URL}?target={urllib.parse.quote(target_url, safe='')}"
         req = urllib.request.Request(url, headers={'User-Agent': 'ToxibhFlix/1.0'})
         with urllib.request.urlopen(req, timeout=5) as res:
             if res.status == 200:
@@ -740,7 +796,8 @@ def _tmdb_fetch(path, params=None):
     if params:
         query.update(params)
     
-    url = f"{base_url}?{urllib.parse.urlencode(query)}"
+    target_url = f"{base_url}?{urllib.parse.urlencode(query)}"
+    url = f"{TMDB_PROXY_WORKER_URL}?target={urllib.parse.quote(target_url, safe='')}"
     
     # Check cache
     now = time.time()
@@ -1523,42 +1580,79 @@ def del_file(file_id):
 # ══════════════════════════════════════════════════════════
 #  GAMES LEADERBOARD
 # ══════════════════════════════════════════════════════════
+def _normalize_score(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _submit_game_high_score(payload):
+    player_name = (payload.get('player_name') or '').strip()[:15] or 'Anonymous'
+    game_name = (payload.get('game') or payload.get('game_name') or '').strip().lower()
+    score = _normalize_score(payload.get('high_score', payload.get('score')))
+
+    if not game_name or score is None:
+        return {'error': 'Invalid data'}, 400
+
+    if score < 0:
+        score = 0
+
+    now_iso = datetime.utcnow().isoformat()
+    db.execute_query('''
+        INSERT INTO leaderboards (id, game_name, player_name, high_score, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(game_name, player_name)
+        DO UPDATE SET high_score = excluded.high_score, updated_at = excluded.updated_at
+        WHERE excluded.high_score > leaderboards.high_score
+    ''', (str(uuid.uuid4()), game_name, player_name, score, now_iso), db_name='admin')
+
+    return {'success': True, 'player_name': player_name, 'game': game_name, 'high_score': score}, 200
+
+
+def _get_game_leaderboard_rows(game_name):
+    normalized_game = (game_name or '').strip().lower()
+    if not normalized_game:
+        return None
+
+    return db.fetch_all('''
+        SELECT player_name, high_score AS score
+        FROM leaderboards
+        WHERE game_name = ?
+        ORDER BY high_score DESC, updated_at ASC
+        LIMIT 10
+    ''', (normalized_game,), db_name='admin')
+
+
+@app.route('/api/games/score', methods=['POST'])
+def submit_universal_game_score():
+    data = request.get_json(silent=True) or {}
+    body, status = _submit_game_high_score(data)
+    return jsonify(body), status
+
+
+@app.route('/api/games/leaderboard')
+def get_universal_game_leaderboard():
+    game_name = request.args.get('game', '')
+    rows = _get_game_leaderboard_rows(game_name)
+    if rows is None:
+        return jsonify({'error': 'Game is required'}), 400
+    return jsonify(rows)
+
+
 @app.route('/api/game/submit_score', methods=['POST'])
 def submit_game_score():
     data = request.get_json(silent=True) or {}
-    player_name = data.get('player_name', '').strip()[:15]
-    game_name = data.get('game_name', '').strip()
-    score = data.get('score', 0)
-    
-    if not player_name: player_name = "Anonymous"
-    if not game_name or not isinstance(score, int):
-        return jsonify({'error': 'Invalid data'}), 400
-        
-    s_id = str(uuid.uuid4())
-    time_now = datetime.utcnow().isoformat()
-    
-    db.execute_query('''
-        INSERT INTO game_scores (id, player_name, game_name, score, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (s_id, player_name, game_name, score, time_now))
-    
-    return jsonify({'success': True})
+    body, status = _submit_game_high_score(data)
+    return jsonify(body), status
 
 @app.route('/api/game/leaderboard')
 def get_game_leaderboard():
-    game_name = request.args.get('game_name', '')
-    if not game_name:
+    game_name = request.args.get('game', '') or request.args.get('game_name', '')
+    rows = _get_game_leaderboard_rows(game_name)
+    if rows is None:
         return jsonify({'error': 'Game name required'}), 400
-        
-    scores = db.fetch_all('''
-        SELECT player_name, score 
-        FROM game_scores 
-        WHERE game_name = ? 
-        ORDER BY score DESC 
-        LIMIT 10
-    ''', (game_name,))
-    
-    return jsonify(scores)
+    return jsonify(rows)
 
 # ══════════════════════════════════════════════════════════
 #  RUN

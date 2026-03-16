@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ToxibhFlix — Profile Dashboard</title>
+<meta name="description" content="Profile dashboard for Continue Watching, Wishlist and Suggestions.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E👤%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/movies/theme.css">
+<link rel="stylesheet" href="/movies/style.css">
+<style>
+  #dashboard-main {
+    padding: 110px 0 70px;
+  }
+  .dash-wrap {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 48px;
+  }
+  .dash-head {
+    margin-bottom: 26px;
+  }
+  .profile-hero-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(10,10,15,0.7);
+    border: 1px solid rgba(0,245,255,0.2);
+    backdrop-filter: blur(8px);
+    width: fit-content;
+    max-width: 100%;
+  }
+  .profile-hero-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    background: linear-gradient(135deg, rgba(0,245,255,0.12), rgba(255,0,110,0.14));
+    border: 1px solid rgba(0,245,255,0.35);
+    box-shadow: 0 0 10px rgba(0,245,255,0.2);
+    flex-shrink: 0;
+  }
+  .profile-hero-text {
+    min-width: 0;
+  }
+  .profile-hero-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--nf-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .profile-hero-status {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(0,245,255,0.78);
+  }
+  .dash-title {
+    font-family: 'Orbitron', monospace;
+    letter-spacing: 0.16em;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    color: var(--nf-text);
+    margin-bottom: 8px;
+  }
+  .dash-sub {
+    color: var(--nf-muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .dash-section {
+    margin-bottom: 34px;
+  }
+  .dash-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.84rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--nf-text);
+    margin-bottom: 14px;
+  }
+  .dash-section-title::before {
+    content: '';
+    width: 3px;
+    height: 20px;
+    background: var(--cyan);
+    box-shadow: 0 0 12px rgba(0,245,255,0.85);
+  }
+
+  .resume-row {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .dash-card {
+    position: relative;
+    width: 200px;
+    flex-shrink: 0;
+    background: rgba(10,10,15,0.72);
+    border: 1px solid rgba(0,245,255,0.18);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .dash-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(0,245,255,0.55);
+    box-shadow: 0 0 14px rgba(0,245,255,0.22);
+  }
+  .dash-card img {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    display: block;
+    background: #0d0d12;
+  }
+  .dash-card-meta {
+    padding: 10px;
+  }
+  .dash-card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.64rem;
+    color: var(--nf-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .dash-card-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem;
+    color: var(--nf-muted);
+  }
+  .resume-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    background: rgba(255,255,255,0.12);
+  }
+  .resume-progress > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #00f5ff, #ff006e);
+    box-shadow: 0 0 8px rgba(0,245,255,0.9);
+  }
+
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    border-radius: 999px;
+    padding: 3px 7px;
+    color: #09161b;
+    background: rgba(0,245,255,0.88);
+  }
+  .empty {
+    color: var(--nf-muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    padding: 12px 2px;
+  }
+
+  @media (max-width: 1180px) {
+    .dash-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 900px) {
+    .dash-wrap { padding: 0 16px; }
+    .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<header id="site-header">
+  <div class="header-left">
+    <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
+    <nav class="header-nav">
+      <a href="/movies/browse">Movies</a>
+      <a href="/movies/tvshows">TV Shows</a>
+      <a href="/profile" class="active">Profile</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="search-wrapper">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search movies and shows..." autocomplete="off" spellcheck="false">
+    </div>
+    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Shubham</span></a>
+    <a href="/movies" class="back-btn">← Switch Profile</a>
+    <a href="/" class="back-btn">← Portfolio</a>
+  </div>
+</header>
+
+<main id="dashboard-main">
+  <div class="dash-wrap">
+    <div class="dash-head">
+      <div class="profile-hero-strip">
+        <div class="profile-hero-avatar" id="dash-avatar">👤</div>
+        <div class="profile-hero-text">
+          <div class="profile-hero-name" id="dash-hero-name">Shubham</div>
+          <div class="profile-hero-status">Active Profile</div>
+        </div>
+      </div>
+      <div class="dash-title" id="dash-title">Shubham Dashboard</div>
+      <div class="dash-sub">Resume · Wishlist · Suggested for You</div>
+    </div>
+
+    <section class="dash-section">
+      <div class="dash-section-title">Continue Watching</div>
+      <div id="resume-row" class="resume-row"></div>
+    </section>
+
+    <section class="dash-section">
+      <div class="dash-section-title">My Wishlist</div>
+      <div id="wishlist-grid" class="dash-grid"></div>
+    </section>
+
+    <section class="dash-section">
+      <div class="dash-section-title">Suggested For You</div>
+      <div id="suggested-grid" class="dash-grid"></div>
+    </section>
+  </div>
+</main>
+
+<div id="toast"></div>
+<script src="/movies/script.js?v=5"></script>
+<script>
+  const DASH_TMDB_API_BASE = 'https://api.themoviedb.org/3';
+  const DASH_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4';
+  const DASH_WORKER = 'https://snowy-bush-2e58.subhamj422.workers.dev/';
+  const DASH_FALLBACK_POSTER = '/static/img/no-poster.png';
+
+  function _dashActiveProfile() {
+    return JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+  }
+  function _dashProfileQuery() {
+    const p = _dashActiveProfile();
+    if (!p) return '';
+    const q = new URLSearchParams();
+    if (p.id) q.set('profile_id', p.id);
+    if (p.name) q.set('profile_name', p.name);
+    return q.toString();
+  }
+  function _dashHeaders() {
+    const p = _dashActiveProfile();
+    const h = {};
+    if (p && p.id) h['X-Profile-Id'] = p.id;
+    return h;
+  }
+  function _dashPoster(poster) {
+    if (!poster) return DASH_FALLBACK_POSTER;
+    if (poster.startsWith('/tmdb_image') || poster.startsWith('/static/')) return poster;
+    if (poster.startsWith('/')) {
+      const abs = `https://image.tmdb.org/t/p/w342${poster}`;
+      return `/tmdb_image?url=${encodeURIComponent(abs)}`;
+    }
+    return poster;
+  }
+
+  async function fetchLocalContinue() {
+    const pq = _dashProfileQuery();
+    const url = pq ? `/api/movies/continue-watching?${pq}` : '/api/movies/continue-watching';
+    const res = await fetch(url, { headers: _dashHeaders() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  async function fetchLocalWishlist() {
+    const pq = _dashProfileQuery();
+    const url = pq ? `/api/movies/watchlist?${pq}` : '/api/movies/watchlist';
+    const res = await fetch(url, { headers: _dashHeaders() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  async function fetchSuggestedFromHistory(continueItems, wishlistItems) {
+    const seeds = [];
+    const pushSeed = (id, type) => {
+      if (!id || !type) return;
+      const key = `${type}:${id}`;
+      if (!seeds.some(s => s.key === key)) seeds.push({ key, id: String(id), type });
+    };
+
+    continueItems.slice(0, 8).forEach(i => pushSeed(i.tmdbId, i.mediaType));
+    wishlistItems.slice(0, 8).forEach(i => pushSeed(i.content_id, i.content_type));
+
+    if (!seeds.length) {
+      const originalApiUrl = `${DASH_TMDB_API_BASE}/trending/all/week?${new URLSearchParams({ api_key: DASH_TMDB_KEY, language: 'en-US' }).toString()}`;
+      const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalApiUrl);
+      const res = await fetch(fetchUrl);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.results || []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 18);
+    }
+
+    const watchedSet = new Set(seeds.map(s => s.key));
+    const merged = [];
+
+    for (const seed of seeds.slice(0, 4)) {
+      const endpoint = `${DASH_TMDB_API_BASE}/${seed.type}/${seed.id}/recommendations?${new URLSearchParams({ api_key: DASH_TMDB_KEY, language: 'en-US', page: '1' }).toString()}`;
+      const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(endpoint);
+      try {
+        const res = await fetch(fetchUrl);
+        if (!res.ok) continue;
+        const data = await res.json();
+        (data.results || []).forEach(item => {
+          const type = seed.type;
+          const key = `${type}:${item.id}`;
+          if (watchedSet.has(key)) return;
+          if (merged.some(m => m._k === key)) return;
+          merged.push({ ...item, media_type: type, _k: key });
+        });
+      } catch (e) {}
+    }
+
+    return merged.slice(0, 24);
+  }
+
+  function toWatchUrl(item) {
+    const type = item.mediaType || item.content_type || item.media_type || 'movie';
+    const id = item.tmdbId || item.content_id || item.id;
+    return type === 'tv' ? `/movies/watch-tv?id=${id}` : `/movies/watch.html?id=${id}`;
+  }
+
+  function renderResume(items) {
+    const row = document.getElementById('resume-row');
+    if (!row) return;
+    if (!items.length) {
+      row.innerHTML = '<div class="empty">No resume data yet.</div>';
+      return;
+    }
+
+    row.innerHTML = items.slice(0, 20).map(item => {
+      const title = item.title || 'Untitled';
+      const poster = _dashPoster(item.poster);
+      const progress = Math.max(0, Math.min(100, Math.round((item.progress || 0) * 100)));
+      const sub = item.mediaType === 'tv'
+        ? `S${item.season || 1}E${item.episode || 1}`
+        : 'Movie';
+      return `
+        <article class="dash-card" onclick="window.location.href='${toWatchUrl(item)}'">
+          <img src="${poster}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='${DASH_FALLBACK_POSTER}'">
+          <div class="dash-card-meta">
+            <div class="dash-card-title">${title}</div>
+            <div class="dash-card-sub">${sub}</div>
+          </div>
+          <div class="resume-progress"><span style="width:${progress}%"></span></div>
+        </article>`;
+    }).join('');
+  }
+
+  function renderGrid(items, id) {
+    const grid = document.getElementById(id);
+    if (!grid) return;
+    if (!items.length) {
+      grid.innerHTML = '<div class="empty">No items available.</div>';
+      return;
+    }
+
+    grid.innerHTML = items.slice(0, 24).map(item => {
+      const type = item.content_type || item.media_type || (item.title ? 'movie' : 'tv');
+      const title = item.title || item.name || 'Untitled';
+      const year = ((item.release_date || item.first_air_date || '') + '').slice(0, 4) || '—';
+      const poster = _dashPoster(item.poster || item.poster_path || null);
+      const nav = type === 'tv'
+        ? `/movies/watch-tv?id=${item.content_id || item.id}`
+        : `/movies/watch.html?id=${item.content_id || item.id}`;
+      return `
+        <article class="dash-card" onclick="window.location.href='${nav}'">
+          <span class="badge">${type.toUpperCase()}</span>
+          <img src="${poster}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='${DASH_FALLBACK_POSTER}'">
+          <div class="dash-card-meta">
+            <div class="dash-card-title">${title}</div>
+            <div class="dash-card-sub">${year}</div>
+          </div>
+        </article>`;
+    }).join('');
+  }
+
+  async function initProfileDashboard() {
+    try {
+      if (typeof bindGlobalSearchOverlay === 'function') bindGlobalSearchOverlay();
+
+      const p = _dashActiveProfile();
+      const name = (p && p.name) ? p.name : 'Shubham';
+      const emoji = (p && p.emoji) ? p.emoji : '👤';
+      const nameEl = document.getElementById('profile-name-display');
+      const titleEl = document.getElementById('dash-title');
+      const heroNameEl = document.getElementById('dash-hero-name');
+      const avatarEl = document.getElementById('dash-avatar');
+      if (nameEl) nameEl.textContent = name;
+      if (titleEl) titleEl.textContent = `${name} Dashboard`;
+      if (heroNameEl) heroNameEl.textContent = name;
+      if (avatarEl) avatarEl.textContent = emoji;
+
+      const [resumeItems, wishlistItems] = await Promise.all([
+        fetchLocalContinue(),
+        fetchLocalWishlist()
+      ]);
+
+      renderResume(resumeItems || []);
+      renderGrid(wishlistItems || [], 'wishlist-grid');
+
+      const suggested = await fetchSuggestedFromHistory(resumeItems || [], wishlistItems || []);
+      renderGrid(suggested || [], 'suggested-grid');
+    } catch (e) {
+      const s = document.getElementById('suggested-grid');
+      if (s) s.innerHTML = '<div class="empty">Failed to load dashboard.</div>';
+    }
+  }
+
+  initProfileDashboard();
+</script>
+</body>
+</html>

@@ -10,6 +10,104 @@
 <link rel="stylesheet" href="/movies/style.css">
 <style>
   /* TV Watch-page extras */
+  #watch-hero {
+    height: 100vh;
+    min-height: 100vh;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    background: #05070d;
+  }
+  .watch-hero-controls {
+    position: absolute;
+    top: 92px;
+    right: 28px;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .watch-hero-audio-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,245,255,0.34);
+    background: rgba(0,0,0,0.38);
+    color: var(--nf-text);
+    backdrop-filter: blur(10px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .watch-hero-audio-btn:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(0,245,255,0.32);
+    color: var(--cyan);
+  }
+  #watch-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    background-size: cover;
+    background-position: center center;
+    filter: brightness(0.5);
+    transform: scale(1.02);
+  }
+  #watch-trailer-layer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100vw;
+    height: 100vh;
+    min-width: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity .5s ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #watch-trailer-layer.active { opacity: 1; }
+  #watch-trailer-iframe {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100vw;
+    height: 100vh;
+    min-width: 100%;
+    min-height: 100%;
+    border: 0;
+    transform: translate(-50%, -50%) scale(1.22);
+    pointer-events: none;
+    filter: saturate(1.08) contrast(1.05) brightness(0.5);
+  }
+  .watch-hero-gradient {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to top, #000 0%, transparent 50%),
+      linear-gradient(to right, rgba(6,8,12,0.72) 0%, rgba(6,8,12,0.32) 52%, rgba(6,8,12,0.14) 100%);
+    z-index: 2;
+  }
+  .watch-hero-content {
+    position: absolute;
+    left: 5%;
+    bottom: 15%;
+    z-index: 10;
+    width: min(700px, calc(100vw - 10%));
+    max-width: 700px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
   #watch-poster-wrap { position: relative; flex-shrink: 0; }
   #watch-poster {
     width: 160px;
@@ -30,50 +128,143 @@
     letter-spacing: 0.08em; margin-bottom: 8px;
   }
   .watch-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+  .watch-btn-glass {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid rgba(0,245,255,0.26);
+    border-radius: 11px;
+    color: var(--nf-text);
+    background: rgba(10,10,15,0.45);
+    backdrop-filter: blur(10px);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .watch-btn-glass:hover {
+    border-color: rgba(0,245,255,0.6);
+    box-shadow: 0 0 12px rgba(0,245,255,0.28);
+  }
+  #watchlist-btn {
+    width: 44px;
+    padding: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
 
-  /* ── SEASON / EPISODE SELECTOR ────────────────────────────── */
+  #watch-detail-shell {
+    position: relative;
+    z-index: 5;
+    margin-top: 0;
+    background: #000;
+    padding-top: 18px;
+  }
+
+  /* ── EPISODES SECTION ──────────────────────────────────────── */
   #tv-selector-section {
-    padding: 32px 48px 0;
+    display: none;
+    padding: 30px 48px 0;
     max-width: 1400px;
     margin: 0 auto;
   }
-  .selector-label {
+  .ep-section-title {
     font-family: 'Orbitron', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.2em;
-    color: var(--nf-muted);
+    font-size: 0.95rem;
+    letter-spacing: 0.14em;
+    color: var(--nf-text);
     text-transform: uppercase;
-    margin-bottom: 14px;
-  }
-
-  /* Season tabs */
-  .season-tabs {
+    margin-bottom: 16px;
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 24px;
+    align-items: center;
+    gap: 12px;
   }
-  .season-tab {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    padding: 8px 18px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: var(--nf-muted);
-    cursor: pointer;
-    transition: var(--transition);
-    text-transform: uppercase;
-  }
-  .season-tab:hover { border-color: var(--cyan); color: var(--cyan); }
-  .season-tab.active {
+  .ep-section-title::before {
+    content: '';
+    width: 3px;
+    height: 22px;
     background: var(--cyan);
+    box-shadow: 0 0 10px rgba(0,245,255,0.9);
+  }
+  .ep-controls-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 230px) 1fr auto;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .ep-season-select {
+    width: 100%;
+    background: rgba(15, 15, 20, 0.6);
+    border: 1px solid rgba(0,245,255,0.18);
+    color: var(--nf-text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    outline: none;
+    backdrop-filter: blur(8px);
+    transition: var(--transition);
+  }
+  .ep-season-select:focus {
     border-color: var(--cyan);
-    color: var(--dark);
     box-shadow: var(--glow);
   }
+  .ep-search-wrap {
+    position: relative;
+  }
+  .ep-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--nf-muted);
+    font-size: 0.9rem;
+    pointer-events: none;
+  }
+  .ep-search-input {
+    width: 100%;
+    background: rgba(15, 15, 20, 0.6);
+    border: 1px solid rgba(0,245,255,0.18);
+    color: var(--nf-text);
+    border-radius: 10px;
+    padding: 10px 12px 10px 34px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.95rem;
+    outline: none;
+    backdrop-filter: blur(8px);
+    transition: var(--transition);
+  }
+  .ep-search-input:focus {
+    border-color: var(--cyan);
+    box-shadow: var(--glow);
+  }
+  .ep-sort-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,0,110,0.35);
+    background: rgba(20, 10, 18, 0.6);
+    color: var(--magenta);
+    cursor: pointer;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    backdrop-filter: blur(8px);
+  }
+  .ep-sort-btn:hover {
+    border-color: var(--magenta);
+    box-shadow: var(--glow-m);
+  }
+  .ep-sort-btn[data-order="desc"] {
+    color: var(--cyan);
+    border-color: rgba(0,245,255,0.45);
+  }
 
-  /* Episode list */
   .ep-list-title {
     font-family: 'Orbitron', monospace;
     font-size: 0.75rem;
@@ -83,114 +274,145 @@
     margin-bottom: 14px;
   }
   .episode-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
     margin-bottom: 40px;
-    max-height: 480px;
+    max-height: 640px;
     overflow-y: auto;
-    padding-right: 4px;
+    padding-right: 8px;
     scrollbar-width: thin;
     scrollbar-color: var(--nf-red) var(--nf-bg2);
   }
   .episode-card {
     display: flex;
-    gap: 14px;
+    gap: 1.35rem;
     align-items: flex-start;
-    padding: 14px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: var(--radius);
+    padding: 1.85rem;
+    min-height: 154px;
+    background: rgba(15, 15, 20, 0.6);
+    border: 1px solid rgba(0,245,255,0.14);
+    border-radius: 12px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
     position: relative;
     overflow: hidden;
+    backdrop-filter: blur(10px);
   }
   .episode-card:hover {
-    background: rgba(0,245,255,0.08);
-    border-color: var(--cyan);
-    transform: translateY(-2px);
+    border-color: rgba(0,245,255,0.5);
+    box-shadow: 0 0 16px rgba(0,245,255,0.2);
+    transform: translateY(-1px);
   }
   .episode-card.active-ep {
-    border-color: var(--cyan);
-    background: rgba(0,245,255,0.12);
+    border-color: rgba(255,0,110,0.45);
+    box-shadow: 0 0 18px rgba(255,0,110,0.2);
+  }
+  .episode-card.active-ep::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    right: 0;
+    width: 3px;
+    background: var(--cyan);
+    box-shadow: 0 0 10px rgba(0,245,255,1);
   }
   .ep-thumb {
+    position: relative;
     flex-shrink: 0;
-    width: 96px;
-    height: 54px;
-    border-radius: 4px;
+    width: 200px;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
     object-fit: cover;
-    background: var(--nf-bg3);
+    background: #0d0d12;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.4rem;
-    color: rgba(0,245,255,0.3);
+    color: rgba(0,245,255,0.4);
     overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
   }
   .ep-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .ep-info { flex: 1; min-width: 0; }
-  .ep-num {
+  .ep-badge {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
     font-family: 'Share Tech Mono', monospace;
     font-size: 0.58rem;
-    color: var(--cyan);
-    letter-spacing: 0.1em;
-    margin-bottom: 4px;
+    letter-spacing: 0.08em;
+    background: rgba(0, 0, 0, 0.72);
+    color: var(--nf-text);
+    border: 1px solid rgba(0,245,255,0.35);
+    border-radius: 5px;
+    padding: 2px 6px;
   }
+  .ep-info { flex: 1; min-width: 0; }
   .ep-title {
     font-family: 'Orbitron', monospace;
-    font-size: 0.65rem;
+    font-size: 1.08rem;
     font-weight: 700;
     color: var(--nf-text);
-    margin-bottom: 6px;
+    margin-bottom: 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .ep-desc {
-    font-size: 0.75rem;
+  .ep-meta {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.06em;
     color: var(--nf-muted);
-    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .ep-desc {
+    font-size: 0.9rem;
+    color: var(--nf-muted);
+    line-height: 1.55;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .ep-runtime {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.58rem;
+  .ep-action {
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
     color: var(--nf-muted);
-    margin-top: 4px;
-  }
-  .ep-play-btn {
-    position: absolute;
-    top: 50%;
-    right: 14px;
-    transform: translateY(-50%) scale(0);
-    width: 32px;
-    height: 32px;
-    background: var(--cyan);
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.8rem;
-    color: #fff;
-    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    font-size: 1rem;
+    background: rgba(255,255,255,0.03);
   }
-  .episode-card:hover .ep-play-btn { transform: translateY(-50%) scale(1); }
 
   #ep-loading {
     font-family: 'Share Tech Mono', monospace;
     font-size: 0.7rem;
     color: var(--nf-muted);
-    padding: 20px 0;
+    padding: 22px 4px;
+  }
+  #ep-empty {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--nf-muted);
+    padding: 18px 4px;
   }
 
   @media (max-width: 900px) {
     #tv-selector-section { padding: 20px 16px 0; }
-    .episode-grid { grid-template-columns: 1fr; }
+    .watch-hero-content {
+      bottom: 10%;
+      left: 4%;
+      width: calc(100vw - 8%);
+      max-width: none;
+    }
+    .ep-controls-row { grid-template-columns: 1fr; }
+    .episode-card { min-height: 136px; padding: 1.4rem; }
+    .ep-thumb { width: 172px; aspect-ratio: 16 / 9; }
     #watch-poster { width: 120px; }
   }
 </style>
@@ -207,22 +429,29 @@
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
+    <button class="back-btn search-overlay-trigger" aria-label="Open search">🔍 Search</button>
     <a href="/movies/tvshows" class="back-btn">← All TV Shows</a>
-    <a href="/movies" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:6px;">👤 <span id="profile-name-display">Switch</span></a>
+    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:6px;">👤 <span id="profile-name-display">Switch</span></a>
     <a href="/" class="back-btn">← Portfolio</a>
   </div>
 </header>
 
 <!-- SHOW HERO -->
 <section id="watch-hero">
+  <div id="watch-trailer-layer">
+    <iframe id="watch-trailer-iframe" allow="autoplay; encrypted-media" title="Trailer Background"></iframe>
+  </div>
   <div class="watch-backdrop" id="watch-backdrop"></div>
-  <div class="watch-vignette"></div>
+  <div class="watch-hero-gradient"></div>
+  <div class="watch-hero-controls watch-idle-ui">
+    <button type="button" class="watch-hero-audio-btn" id="watch-audio-toggle" aria-label="Unmute trailer" title="Unmute trailer">🔇</button>
+  </div>
   <div class="watch-hero-content">
     <div id="watch-poster-wrap">
       <img id="watch-poster" src="/static/img/no-poster.png" alt="" onerror="this.onerror=null;this.src='/static/img/no-poster.png'">
     </div>
     <div class="watch-meta-col">
-      <div class="watch-badge">Now Streaming</div>
+
       <h1 class="watch-title" id="watch-title">Loading…</h1>
       <div id="watch-tagline"></div>
       <div class="watch-meta-row">
@@ -235,36 +464,17 @@
       <p class="watch-overview" id="watch-overview"></p>
       <div class="watch-actions">
         <button class="btn-play" id="watch-btn">▶&nbsp;&nbsp;WATCH NOW</button>
-        <button class="btn-info" id="watchlist-btn">+ WATCHLIST</button>
+        <button class="watch-btn-glass" id="watchlist-btn" data-icon-mode="1" title="Add to Watchlist" aria-label="Add to Watchlist">+</button>
+        <button class="watch-btn-glass" id="download-btn">Download</button>
+        <button class="watch-btn-glass" id="similars-btn">Similars</button>
       </div>
     </div>
   </div>
 </section>
 
-<!-- TV SELECTOR (Season Tabs + Episode List) -->
-<section id="tv-selector-section">
+<div id="watch-detail-shell">
 
-  <div class="selector-label">⚙ Select Season &amp; Episode</div>
-
-  <!-- Season tabs -->
-  <div class="season-tabs" id="season-tabs">
-    <div class="loading-skeleton" style="width:80px;height:34px;flex-shrink:0;"></div>
-    <div class="loading-skeleton" style="width:80px;height:34px;flex-shrink:0;"></div>
-    <div class="loading-skeleton" style="width:80px;height:34px;flex-shrink:0;"></div>
-  </div>
-
-  <!-- Episode list -->
-  <div class="ep-list-title" id="ep-list-title">Episodes</div>
-  <div class="episode-grid" id="episode-grid">
-    <div id="ep-loading">Loading episodes…</div>
-  </div>
-
-</section>
-
-<!-- PLAYER SECTION -->
 <section id="player-section">
-
-  <!-- Resume banner -->
   <div class="resume-banner" id="resume-banner">
     <span>🕐 You left off — S<span id="resume-season"></span>E<span id="resume-episode"></span> at <strong id="resume-time"></strong></span>
     <div style="display:flex;gap:10px;">
@@ -275,22 +485,25 @@
       </button>
     </div>
   </div>
+</section>
 
-  <!-- Iframe container -->
-  <div class="player-container" id="player-container">
-    <div id="player-placeholder" style="
-      height:580px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:20px;
-      background:linear-gradient(135deg,#0a0a0f,#140008);
-      cursor:pointer;"
-      onclick="document.getElementById('watch-btn').click()">
-      <div style="font-size:5rem;opacity:0.25;">📺</div>
-      <div style="font-family:'Orbitron',monospace;font-size:0.75rem;letter-spacing:0.25em;color:rgba(0,245,255,0.65);text-transform:uppercase;">Click Watch Now or Select an Episode</div>
+<!-- TV EPISODES -->
+<section id="tv-selector-section">
+
+  <div class="ep-section-title">Episodes</div>
+
+  <div class="ep-controls-row">
+    <select id="season-select" class="ep-season-select" aria-label="Select season"></select>
+    <div class="ep-search-wrap">
+      <span class="ep-search-icon">🔍</span>
+      <input id="episode-search" class="ep-search-input" type="search" placeholder="Search episodes by name..." autocomplete="off">
     </div>
+    <button id="episode-sort" class="ep-sort-btn" type="button" data-order="asc" aria-label="Sort episodes ascending">↑</button>
+  </div>
+
+  <div class="ep-list-title" id="ep-list-title">Season 1 Episodes</div>
+  <div class="episode-grid" id="episode-grid">
+    <div id="ep-loading">Loading episodes…</div>
   </div>
 
 </section>
@@ -307,6 +520,8 @@
   <div class="poster-row" id="row-recs"></div>
 </section>
 
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -318,7 +533,9 @@
       const nameEl = document.getElementById('profile-name-display');
       if (nameEl) nameEl.textContent = p.name;
     }
-    initWatchTVPage();
+    initWatchTVPage().catch(() => {
+      showToast('⚠ Server error loading show info.');
+    });
 
     // Progress saved indicator
     let progressTimeout;

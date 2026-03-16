@@ -21,6 +21,7 @@ def _detect_data_root():
     candidates = []
     if env_path:
         candidates.append(env_path)
+    candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
     candidates.append(os.path.abspath(os.path.join(os.sep, 'data')))
     candidates.append(os.path.join(os.path.expanduser('~'), 'data'))
 
@@ -60,6 +61,7 @@ TABLE_TO_DB = {
     'vault_files': 'admin',
     'chatbot_logs': 'admin',
     'game_scores': 'admin',
+    'leaderboards': 'admin',
     'settings': 'admin',
 
     'users': 'flix',
@@ -202,6 +204,43 @@ def _init_admin_db():
     ''')
 
     c.execute('''
+        CREATE TABLE IF NOT EXISTS leaderboards (
+            id TEXT PRIMARY KEY,
+            game_name TEXT NOT NULL,
+            player_name TEXT NOT NULL,
+            high_score INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            UNIQUE(game_name, player_name)
+        )
+    ''')
+
+    c.execute('CREATE INDEX IF NOT EXISTS idx_leaderboards_game_score ON leaderboards(game_name, high_score DESC)')
+
+    c.execute('''
+        INSERT INTO leaderboards (id, game_name, player_name, high_score, updated_at)
+        SELECT
+            lower(hex(randomblob(16))),
+            lower(trim(game_name)),
+            trim(player_name),
+            MAX(COALESCE(score, 0)) AS high_score,
+            COALESCE(MAX(timestamp), CURRENT_TIMESTAMP)
+        FROM game_scores
+        WHERE trim(COALESCE(game_name, '')) <> ''
+          AND trim(COALESCE(player_name, '')) <> ''
+        GROUP BY lower(trim(game_name)), trim(player_name)
+        ON CONFLICT(game_name, player_name)
+        DO UPDATE SET
+            high_score = CASE
+                WHEN excluded.high_score > leaderboards.high_score THEN excluded.high_score
+                ELSE leaderboards.high_score
+            END,
+            updated_at = CASE
+                WHEN excluded.high_score > leaderboards.high_score THEN excluded.updated_at
+                ELSE leaderboards.updated_at
+            END
+    ''')
+
+    c.execute('''
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
@@ -292,6 +331,24 @@ def _init_flix_db():
     c.execute('CREATE INDEX IF NOT EXISTS idx_watch_history_profile_time ON watch_history(profile_id, last_watched DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_resume_profile_updated ON resume_progress(profile_id, updated_at DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_profile_added ON watchlist(profile_id, added_at DESC)')
+
+    c.execute('''
+        CREATE VIEW IF NOT EXISTS Profiles AS
+        SELECT id, profile_name AS name, avatar
+        FROM profiles
+    ''')
+
+    c.execute('''
+        CREATE VIEW IF NOT EXISTS WatchHistory AS
+        SELECT profile_id, content_id AS movie_id, progress
+        FROM watch_history
+    ''')
+
+    c.execute('''
+        CREATE VIEW IF NOT EXISTS Wishlist AS
+        SELECT profile_id, content_id AS movie_id
+        FROM watchlist
+    ''')
 
     now = datetime.utcnow().isoformat()
     c.execute(

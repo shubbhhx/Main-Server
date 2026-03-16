@@ -18,6 +18,29 @@
     position: relative;
   }
 
+  .back-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    color: var(--magenta);
+    background: none;
+    border: 1px solid var(--magenta);
+    padding: 7px 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: .25s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    clip-path: polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%);
+  }
+  .back-btn:hover {
+    color: #fff;
+    border-color: var(--magenta);
+    background: rgba(255,0,110,.1);
+    box-shadow: var(--glow-m);
+  }
+
   .profiles-wrap { position: relative; z-index: 2; text-align: center; width: 100%; max-width: 900px; }
 
   /* ── LOGO ── */
@@ -48,6 +71,50 @@
     color: rgba(224,247,255,.8);
     letter-spacing: .06em;
     margin-bottom: 48px;
+  }
+
+  .active-profile-strip {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: -14px auto 30px;
+    padding: 10px 14px;
+    border: 1px solid rgba(0,245,255,.24);
+    background: rgba(0,245,255,.06);
+    border-radius: 8px;
+    width: fit-content;
+    max-width: min(100%, 740px);
+    flex-wrap: wrap;
+  }
+  .active-profile-strip.show { display: inline-flex; }
+  .active-profile-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .72rem;
+    letter-spacing: .08em;
+    color: rgba(224,247,255,.9);
+    text-transform: uppercase;
+  }
+  .active-profile-name {
+    color: var(--cyan);
+    text-shadow: var(--glow);
+  }
+  .continue-btn {
+    border: 1px solid rgba(0,245,255,.35);
+    background: rgba(0,245,255,.14);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: .2s ease;
+  }
+  .continue-btn:hover {
+    box-shadow: var(--glow);
+    background: rgba(0,245,255,.2);
   }
 
   /* ── PROFILE GRID ── */
@@ -173,19 +240,35 @@
   <div class="logo">TOXIBH<span>FLIX</span></div>
   <div class="heading">Who's Watching?</div>
 
+  <div class="active-profile-strip" id="active-profile-strip">
+    <div class="active-profile-text">Welcome back, <span class="active-profile-name" id="active-profile-name">Guest</span></div>
+    <button type="button" class="continue-btn" id="continue-profile-btn" onclick="continueWithActiveProfile()">Continue</button>
+  </div>
+
   <div class="profiles-grid" id="profiles-grid">
     <!-- Profiles loaded from API or defaults -->
   </div>
 
   <div style="margin-top:12px">
+    <a href="/profile" class="action-link">👤 Profile Dashboard</a>
+  </div>
+
+  <div style="margin-top:12px">
     <a href="/movies/torrent" class="action-link">🧲 Torrent Stream</a>
+  </div>
+
+  <div style="margin-top:12px">
+    <a href="/" class="action-link">← Portfolio</a>
   </div>
 </div>
 
 <div id="flash"></div>
 <div id="toast"></div>
 
+<script src="/movies/script.js?v=5"></script>
 <script>
+  let loadedProfiles = [];
+
   // ── INJECT PORTFOLIO BACKGROUND FX ──────────────────────────
   (function() {
     const CYAN = '#00f5ff', MAGENTA = '#ff006e';
@@ -241,44 +324,147 @@
     }
   })();
 
-  const DEFAULT_PROFILES = [
-    { name: 'Shubham',     emoji: '🤖' },
-    { name: 'Chill Mode',  emoji: '🎮' },
-    { name: 'Night Owl',   emoji: '🌙' },
-    { name: 'Action Fan',  emoji: '⚡' },
-  ];
-
   async function loadProfiles() {
-    let profiles = DEFAULT_PROFILES;
+    let profiles = [];
     try {
-      const r = await fetch('/api/movies/profiles');
+      const r = await fetch('/api/profiles');
       if (r.ok) {
         const data = await r.json();
-        if (data && data.length) profiles = data;
+        if (Array.isArray(data)) profiles = data;
       }
     } catch(e) {}
 
+    profiles = profiles.map(p => ({
+      id: p.id || '',
+      name: p.name || p.profile_name || 'Profile',
+      emoji: p.emoji || p.avatar || '👤'
+    }));
+
+    loadedProfiles = profiles;
+    renderActiveProfileStrip();
+
     const grid = document.getElementById('profiles-grid');
-    grid.innerHTML = profiles.map((p, i) => `
-      <div class="profile-item" onclick="selectProfile('${p.id || ''}','${p.name}','${p.emoji}')">
+    grid.innerHTML = profiles.map((p) => `
+      <div class="profile-item" onclick="handleSelectProfile('${p.id || ''}','${p.name}','${p.emoji}')">
         <div class="avatar">${p.emoji}</div>
         <div class="pname">${p.name}</div>
       </div>
-    `).join('');
+    `).join('') + `
+      <div class="profile-item" onclick="handleGuestLogin()">
+        <div class="avatar">👤</div>
+        <div class="pname">Guest</div>
+      </div>
+    `;
   }
 
-  function selectProfile(id, name, emoji) {
-    localStorage.setItem('toxibhflix_profile', JSON.stringify({ id, name, emoji, ts: Date.now() }));
+  function persistActiveProfile(profileState) {
+    localStorage.setItem('toxibhflix_profile', JSON.stringify(profileState));
+    localStorage.setItem('activeProfile', JSON.stringify(profileState));
+  }
+
+  function handleSelectProfile(id, name, emoji) {
+    const profileState = {
+      id: id || '',
+      name: name || 'Profile',
+      emoji: emoji || '👤',
+      isGuest: false,
+      ts: Date.now()
+    };
+    persistActiveProfile(profileState);
     document.getElementById('flash').classList.add('on');
     setTimeout(() => { window.location.href = '/movies/browse'; }, 450);
   }
 
-  function showToast(msg) {
+  function handleGuestLogin() {
+    const guestProfile = {
+      id: 'guest',
+      name: 'Guest',
+      avatar: 'guest-icon',
+      emoji: '👤',
+      isGuest: true,
+      ts: Date.now()
+    };
+    persistActiveProfile(guestProfile);
+    document.getElementById('flash').classList.add('on');
+    setTimeout(() => { window.location.href = '/movies/browse'; }, 450);
+  }
+
+  function showProfileToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg;
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 2800);
   }
+
+  function continueWithActiveProfile() {
+    const active = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    if (!active || !active.name) {
+      showProfileToast('⚠ No active profile found.');
+      return;
+    }
+
+    const match = loadedProfiles.find(p => {
+      return String(p.id || '') === String(active.id || '');
+    });
+
+    if (active.isGuest) {
+      handleGuestLogin();
+      return;
+    }
+
+    if (!match) {
+      showProfileToast('⚠ Previously selected profile is unavailable.');
+      return;
+    }
+
+    handleSelectProfile(match.id || '', match.name, match.emoji || '👤');
+  }
+
+  function renderActiveProfileStrip() {
+    const strip = document.getElementById('active-profile-strip');
+    const activeName = document.getElementById('active-profile-name');
+    const continueBtn = document.getElementById('continue-profile-btn');
+    const active = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+
+    if (!strip || !activeName || !continueBtn || !active || !active.name) {
+      if (strip) strip.classList.remove('show');
+      return;
+    }
+
+    const match = loadedProfiles.find(p => {
+      return String(p.id || '') === String(active.id || '');
+    });
+
+    if (active.isGuest) {
+      activeName.textContent = 'Guest';
+      strip.classList.add('show');
+      setTimeout(() => continueBtn.focus(), 0);
+      return;
+    }
+
+    if (!match) {
+      strip.classList.remove('show');
+      return;
+    }
+
+    activeName.textContent = match.name;
+    strip.classList.add('show');
+    setTimeout(() => continueBtn.focus(), 0);
+  }
+
+  window.addEventListener('keydown', function(event) {
+    if (event.key !== 'Enter') return;
+    const strip = document.getElementById('active-profile-strip');
+    if (!strip || !strip.classList.contains('show')) return;
+
+    const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+
+    event.preventDefault();
+    continueWithActiveProfile();
+  });
+
+  if (typeof bindGlobalSearchOverlay === 'function') bindGlobalSearchOverlay();
 
   loadProfiles();
 </script>

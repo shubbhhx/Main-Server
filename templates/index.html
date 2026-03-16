@@ -57,6 +57,8 @@
   #hero{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 20px;overflow:hidden;}
   .hero-tag{font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:.4em;color:var(--magenta);text-transform:uppercase;margin-bottom:24px;animation:fadeSlideUp .8s ease forwards;opacity:0;}
   .hero-name{font-family:'Orbitron',monospace;font-size:clamp(2.8rem,9vw,7rem);font-weight:900;line-height:1;background:linear-gradient(135deg,#fff 0%,var(--cyan) 50%,var(--magenta) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:12px;animation:fadeSlideUp .8s .2s ease forwards;opacity:0;position:relative;}
+  .hero-name-shell{position:relative;display:inline-block;line-height:1;}
+  .hero-name-shell .hero-name{margin-bottom:0;}
   .glitch{position:relative;}
   .glitch::before,.glitch::after{content:attr(data-text);position:absolute;inset:0;background:linear-gradient(135deg,#fff 0%,var(--cyan) 50%,var(--magenta) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .glitch::before{left:2px;animation:glitch1 5s infinite;clip-path:polygon(0 0,100% 0,100% 35%,0 35%);}
@@ -436,7 +438,9 @@
   <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
   <div class="hud-corner bl"></div><div class="hud-corner br"></div>
   <div class="hero-tag">// MCA GRADUATE · AI &amp; BACKEND ENGINEER //</div>
-  <div class="hero-name glitch" data-text="SUBHAM JENA">SUBHAM JENA</div>
+  <div class="hero-name-shell" id="hero-name-shell">
+    <div id="hero-name-static" class="hero-name glitch" data-text="SUBHAM JENA">SUBHAM JENA</div>
+  </div>
   <div class="hero-title">
     <span>MACHINE LEARNING</span> &nbsp;×&nbsp; <span>BACKEND DEV</span> &nbsp;×&nbsp; <span>DATA SCIENCE</span>
   </div>
@@ -909,7 +913,7 @@
   <div class="pm-box">
     <button class="pm-close" onclick="closePlayerModal()">✕</button>
     <div class="pm-title">ENTER PLAYER ID</div>
-    <div class="pm-desc">Your score will be recorded on the global leaderboard.</div>
+    <div class="pm-desc" id="playerModalDesc">Your score will be recorded on the global leaderboard.</div>
     <input type="text" id="playerNameInput" class="pm-input" placeholder="GUEST_404" maxlength="15" autocomplete="off">
     <button class="btn-primary" style="width:100%" onmouseenter="playHoverSound()" onclick="playClickSound(); startGameAfterName()">PROCEED TO GAME</button>
   </div>
@@ -1133,6 +1137,10 @@ if(window.speechSynthesis&&window.speechSynthesis.onvoiceschanged!==undefined)wi
 
 let currentPlayerName = "GUEST";
 let pendingGameToStart = null;
+const GAME_LEADERBOARD_TARGETS = {
+  snake: 'snakeLB',
+  rocket: 'rocketLB'
+};
 
 // Game State Definitions
 const GSTATE = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
@@ -1147,7 +1155,7 @@ function resizeGameCanvas(c) {
 // Global Leaderboard Fetch
 async function loadLeaderboard(gameName, targetDivId) {
   try {
-    const r = await fetch(`/api/game/leaderboard?game_name=${gameName}`);
+    const r = await fetch(`/api/games/leaderboard?game=${encodeURIComponent(gameName)}`);
     const data = await r.json();
     const lbDiv = document.getElementById(targetDivId);
     
@@ -1171,14 +1179,12 @@ async function loadLeaderboard(gameName, targetDivId) {
 async function submitScore(gameName, score) {
   if (score <= 0) return;
   try {
-    await fetch('/api/game/submit_score', {
+    await fetch('/api/games/score', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({player_name: currentPlayerName, game_name: gameName, score: score})
+      body: JSON.stringify({player_name: currentPlayerName, game: gameName, high_score: score})
     });
-    // Refresh LBs
-    loadLeaderboard('snake', 'snakeLB');
-    loadLeaderboard('rocket', 'rocketLB');
+    Object.entries(GAME_LEADERBOARD_TARGETS).forEach(([name, targetId]) => loadLeaderboard(name, targetId));
   } catch (e) {
     console.error("Score submit failed", e);
   }
@@ -1187,18 +1193,24 @@ async function submitScore(gameName, score) {
 // Modal Logic
 function initGameSession(gameType) {
   pendingGameToStart = gameType;
-  
   const cachedName = localStorage.getItem('svj_playerName');
+  const modalDesc = document.getElementById('playerModalDesc');
+  const modalInput = document.getElementById('playerNameInput');
   if (cachedName) {
     currentPlayerName = cachedName;
-    launchFullscreenGameSequence(pendingGameToStart);
-    pendingGameToStart = null;
-    return;
+    modalInput.value = cachedName;
+    if (modalDesc) modalDesc.textContent = `Welcome back, ${cachedName}. Confirm your identity or edit your ID before launch.`;
+  } else {
+    modalInput.value = "";
+    if (modalDesc) modalDesc.textContent = 'Your score will be recorded on the global leaderboard.';
   }
-  
-  document.getElementById('playerNameInput').value = "";
   document.getElementById('playerModal').classList.add('show');
-  document.getElementById('playerNameInput').focus();
+
+  if (cachedName) {
+    modalInput.select();
+  } else {
+    modalInput.focus();
+  }
 }
 
 function closePlayerModal() {
@@ -1507,19 +1519,62 @@ let rState = GSTATE.MENU;
 let player = {x:0, y:0, w:30, h:40, speed:6, vx:0};
 let lasers = [];
 let enemies = [];
-let rParticles = [];
+const ROCKET_PARTICLE_POOL_SIZE = 260;
+const ROCKET_EXPLOSION_PARTICLES = 28;
+const ROCKET_MAX_ACTIVE_PARTICLES = 220;
+let rocketParticlePool = [];
+let rocketActiveParticles = [];
 let stars = [];
 let rScore = 0;
 let enemySpawnRate = 0.02;
+let lastRocketTime = 0;
+
+function initRocketParticlePool() {
+  if (rocketParticlePool.length) return;
+  for (let index = 0; index < ROCKET_PARTICLE_POOL_SIZE; index++) {
+    rocketParticlePool.push({
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      life: 0,
+      color: '255,0,110',
+      size: 0,
+      active: false
+    });
+  }
+}
+
+function allocRocketParticle() {
+  for (let index = 0; index < rocketParticlePool.length; index++) {
+    const particle = rocketParticlePool[index];
+    if (!particle.active) {
+      particle.active = true;
+      rocketActiveParticles.push(particle);
+      return particle;
+    }
+  }
+  return null;
+}
+
+function releaseRocketParticle(index) {
+  const particle = rocketActiveParticles[index];
+  if (!particle) return;
+  particle.active = false;
+  particle.life = 0;
+  rocketActiveParticles.splice(index, 1);
+}
 
 function initRocket() {
+  initRocketParticlePool();
   resizeGameCanvas(rCanvas);
   player.x = rCanvas.width/2 - player.w/2;
   player.y = rCanvas.height - player.h - 20;
   player.vx = 0;
   lasers = [];
   enemies = [];
-  rParticles = [];
+  rocketActiveParticles.forEach(p => { p.active = false; p.life = 0; });
+  rocketActiveParticles = [];
   rScore = 0;
   enemySpawnRate = 0.02;
   document.getElementById('rocketScore').textContent = '0';
@@ -1538,12 +1593,18 @@ function rShoot() {
 }
 
 function rExplode(x, y, color) {
-  for(let i=0; i<40; i++) {
-    rParticles.push({
-      x: x, y: y,
-      vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
-      life: 1.0, color: color, size: Math.random()*5+2
-    });
+  const availableSlots = Math.max(0, ROCKET_MAX_ACTIVE_PARTICLES - rocketActiveParticles.length);
+  const spawnCount = Math.min(ROCKET_EXPLOSION_PARTICLES, availableSlots);
+  for (let index = 0; index < spawnCount; index++) {
+    const particle = allocRocketParticle();
+    if (!particle) break;
+    particle.x = x;
+    particle.y = y;
+    particle.vx = (Math.random() - 0.5) * 12;
+    particle.vy = (Math.random() - 0.5) * 12;
+    particle.life = 1.0;
+    particle.color = color;
+    particle.size = Math.random() * 4 + 1.8;
   }
 }
 
@@ -1553,6 +1614,7 @@ function startRocketGame() {
   rState = GSTATE.PLAYING;
   document.getElementById('rocketScoreDisplay').style.display = 'block';
   document.getElementById('rocketFinalScoreDisplay').style.display = 'none';
+  lastRocketTime = performance.now();
   if(rReq) cancelAnimationFrame(rReq);
   rocketLoop(performance.now(), false);
 }
@@ -1597,6 +1659,9 @@ function rocketLoop(time, forcedDraw = false) {
     rReq = requestAnimationFrame(rocketLoop);
   }
 
+  const deltaTime = forcedDraw ? 1 : Math.min(2.5, Math.max(0.45, (time - lastRocketTime) / 16.666));
+  if (!forcedDraw) lastRocketTime = time;
+
   rCtx.fillStyle = 'rgba(0,0,0,0.4)';
   rCtx.fillRect(0, 0, rCanvas.width, rCanvas.height);
 
@@ -1604,7 +1669,7 @@ function rocketLoop(time, forcedDraw = false) {
   rCtx.fillStyle = '#fff';
   stars.forEach(s => {
     if(!forcedDraw) {
-      s.y += s.speed;
+      s.y += s.speed * deltaTime;
       if(s.y > rCanvas.height) { s.y = 0; s.x = Math.random()*rCanvas.width; }
     }
     rCtx.fillRect(s.x, s.y, s.size, s.size);
@@ -1616,7 +1681,7 @@ function rocketLoop(time, forcedDraw = false) {
     else if ((keys['ArrowRight'] || keys['d'] || mRight) && player.x < rCanvas.width - player.w) player.vx = player.speed;
     else player.vx = player.vx * 0.8; // friction
     
-    player.x += player.vx;
+    player.x += player.vx * deltaTime;
     // Bounds check
     if (player.x < 0) player.x = 0;
     if (player.x > rCanvas.width - player.w) player.x = rCanvas.width - player.w;
@@ -1624,7 +1689,7 @@ function rocketLoop(time, forcedDraw = false) {
     // Lasers
     for (let i = lasers.length-1; i>=0; i--) {
       let l = lasers[i];
-      l.y -= l.speed;
+      l.y -= l.speed * deltaTime;
       if (l.y < 0) { lasers.splice(i,1); continue; }
       rCtx.shadowBlur = 10;
       rCtx.shadowColor = '#00f5ff';
@@ -1634,7 +1699,7 @@ function rocketLoop(time, forcedDraw = false) {
     rCtx.shadowBlur = 0;
 
     // Enemies
-    if (Math.random() < enemySpawnRate) {
+    if (Math.random() < enemySpawnRate * deltaTime) {
       enemies.push({
         x: Math.random() * (rCanvas.width - 30), y: -30,
         w: 30, h: 30, speed: Math.random()*2+1 + (rScore/500)
@@ -1644,7 +1709,7 @@ function rocketLoop(time, forcedDraw = false) {
     
     for (let i = enemies.length-1; i>=0; i--) {
       let e = enemies[i];
-      e.y += e.speed;
+      e.y += e.speed * deltaTime;
       
       // Collision with Player
       if (e.x < player.x+player.w && e.x+e.w > player.x && e.y < player.y+player.h && e.y+e.h > player.y) {
@@ -1716,13 +1781,14 @@ function rocketLoop(time, forcedDraw = false) {
   rCtx.globalCompositeOperation = 'lighter';
   
   // Draw Particles
-  for (let i = rParticles.length-1; i>=0; i--) {
-    let p = rParticles[i];
+  for (let i = rocketActiveParticles.length - 1; i >= 0; i--) {
+    const p = rocketActiveParticles[i];
     if(!forcedDraw) {
-      p.x += p.vx; p.y += p.vy;
-      p.life -= 0.03;
+      p.x += p.vx * deltaTime;
+      p.y += p.vy * deltaTime;
+      p.life -= 0.03 * deltaTime;
     }
-    if (p.life <= 0) { rParticles.splice(i, 1); continue; }
+    if (p.life <= 0) { releaseRocketParticle(i); continue; }
     rCtx.shadowBlur = 20;
     rCtx.shadowColor = `rgb(${p.color})`;
     rCtx.fillStyle = `rgba(${p.color},${p.life})`;
@@ -1742,8 +1808,7 @@ window.addEventListener('resize', () => {
 
 // Load LBs initially
 window.addEventListener('DOMContentLoaded', () => {
-  loadLeaderboard('snake', 'snakeLB');
-  loadLeaderboard('rocket', 'rocketLB');
+  Object.entries(GAME_LEADERBOARD_TARGETS).forEach(([name, targetId]) => loadLeaderboard(name, targetId));
 });
 
 async function submitContactForm(e) {

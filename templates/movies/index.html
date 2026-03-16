@@ -29,7 +29,7 @@
       <span class="search-icon">🔍</span>
       <input type="text" id="search-input" placeholder="Search movies..." autocomplete="off" spellcheck="false">
     </div>
-    <a href="/movies" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
+    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
     <a href="/" class="back-btn">← Portfolio</a>
   </div>
 </header>
@@ -39,15 +39,18 @@
   <div class="hero-backdrop" id="hero-backdrop"></div>
   <div class="hero-vignette"></div>
   <div class="hero-vignette-side"></div>
+  <div class="hero-floating-controls">
+    <button type="button" class="hero-audio-btn" id="hero-audio-toggle" aria-label="Unmute trailer" title="Unmute trailer" style="display:none;">🔇</button>
+  </div>
   <div class="hero-content">
-    <div class="hero-badge">Featured Today</div>
+    <div class="hero-content-anchor">
     <h1 class="hero-title" id="hero-title">Loading…</h1>
     <div class="hero-meta" id="hero-meta"></div>
     <p class="hero-desc" id="hero-desc"></p>
     <div class="hero-actions">
       <a class="btn-play" id="hero-watch" href="#">▶&nbsp;&nbsp;WATCH NOW</a>
       <button class="btn-info" id="hero-info" onclick="if(document.getElementById('hero-watch').href&&document.getElementById('hero-watch').href!=='#')window.location.href=document.getElementById('hero-watch').href">ℹ&nbsp;&nbsp;MORE INFO</button>
-      <button class="btn-info" id="hero-audio-toggle" style="display:none;" onclick="toggleHeroTrailerMute()">🔊 Unmute</button>
+    </div>
     </div>
   </div>
 </section>
@@ -91,18 +94,6 @@
       <div class="poster-row" id="row-watchlist"></div>
     </div>
 
-    <!-- Browse by Genre -->
-    <div class="row-section" id="genre-section">
-      <div class="row-title">🎬 Browse by Genre</div>
-      <div class="genre-row" id="movie-genres"></div>
-    </div>
-
-    <!-- Genre Results (Hidden by default) -->
-    <div class="row-section" id="movie-genre-results" style="display:none;">
-      <div class="row-title" id="movie-genre-title">Genre Results</div>
-      <div class="poster-row" id="movie-genre-row"></div>
-    </div>
-
     <div class="row-section" id="row-popular-section">
       <div class="row-title">🌟 Popular Movies</div>
       <div class="poster-row" id="row-popular"></div>
@@ -116,6 +107,27 @@
     <div class="row-section" id="row-upcoming-section">
       <div class="row-title">🎬 Coming Soon</div>
       <div class="poster-row" id="row-upcoming"></div>
+    </div>
+
+    <!-- Browse by Genre (moved to bottom) -->
+    <div class="row-section" id="genre-section">
+      <div class="row-title">🎬 Browse by Genre</div>
+      <div class="genre-row" id="movie-genres"></div>
+    </div>
+
+    <!-- All Movies (paginated discover grid) -->
+    <div class="row-section" id="all-movies-section">
+      <div class="row-title">🎞 All Movies</div>
+      <div class="all-media-grid" id="all-movies-grid"></div>
+      <div class="all-media-actions">
+        <button type="button" class="all-media-load-btn" id="all-movies-load-more">Load More</button>
+      </div>
+    </div>
+
+    <!-- Genre Results (Hidden by default) -->
+    <div class="row-section" id="movie-genre-results" style="display:none;">
+      <div class="row-title" id="movie-genre-title">Genre Results</div>
+      <div class="poster-row" id="movie-genre-row"></div>
     </div>
   </div>
 
@@ -176,7 +188,7 @@
       // No profile — redirect to profiles
       window.location.href = '/movies';
     }
-    initIndexPage();
+    initIndexPage().catch(() => {});
     loadContinueWatching('row-continue');
   });
 </script>

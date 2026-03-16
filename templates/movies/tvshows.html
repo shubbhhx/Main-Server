@@ -29,7 +29,7 @@
       <span class="search-icon">🔍</span>
       <input type="text" id="search-input" placeholder="Search TV shows..." autocomplete="off" spellcheck="false">
     </div>
-    <a href="/movies" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
+    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
     <a href="/" class="back-btn">← Portfolio</a>
   </div>
 </header>
@@ -39,15 +39,18 @@
   <div class="hero-backdrop" id="hero-backdrop"></div>
   <div class="hero-vignette"></div>
   <div class="hero-vignette-side"></div>
+  <div class="hero-floating-controls">
+    <button type="button" class="hero-audio-btn" id="hero-audio-toggle" aria-label="Unmute trailer" title="Unmute trailer" style="display:none;">🔇</button>
+  </div>
   <div class="hero-content">
-    <div class="hero-badge">Featured Today</div>
+    <div class="hero-content-anchor">
     <h1 class="hero-title" id="hero-title">Loading…</h1>
     <div class="hero-meta" id="hero-meta"></div>
     <p class="hero-desc" id="hero-desc"></p>
     <div class="hero-actions">
       <a class="btn-play" id="hero-watch" href="#">▶&nbsp;&nbsp;WATCH NOW</a>
       <button class="btn-info" id="hero-info" onclick="if(document.getElementById('hero-watch').href&&document.getElementById('hero-watch').href!=='#')window.location.href=document.getElementById('hero-watch').href">ℹ&nbsp;&nbsp;MORE INFO</button>
-      <button class="btn-info" id="hero-audio-toggle" style="display:none;" onclick="toggleHeroTrailerMute()">🔊 Unmute</button>
+    </div>
     </div>
   </div>
 </section>
@@ -117,6 +120,15 @@
       <div class="genre-row" id="tv-genres"></div>
     </div>
 
+    <!-- All TV Shows (paginated discover grid) -->
+    <div class="row-section" id="all-tv-section">
+      <div class="row-title">📺 All TV Shows</div>
+      <div class="all-media-grid" id="all-tv-grid"></div>
+      <div class="all-media-actions">
+        <button type="button" class="all-media-load-btn" id="all-tv-load-more">Load More</button>
+      </div>
+    </div>
+
     <!-- Genre Results (Hidden by default) -->
     <div class="row-section" id="tv-genre-results" style="display:none;">
       <div class="row-title" id="tv-genre-title">Genre Results</div>
@@ -179,7 +191,7 @@
     } else {
       window.location.href = '/movies';
     }
-    initTVPage();
+    initTVPage().catch(() => {});
   });
 </script>
 </body>
