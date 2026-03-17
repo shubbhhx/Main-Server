@@ -327,10 +327,7 @@ def api_movies_profiles_get():
         return jsonify([_normalize_profile(r) for r in rows])
 
     defaults = [
-        {'name': 'Shubham', 'emoji': '🤖'},
-        {'name': 'Chill Mode', 'emoji': '🎮'},
-        {'name': 'Night Owl', 'emoji': '🌙'},
-        {'name': 'Action Fan', 'emoji': '⚡'},
+        {'id': 'guest', 'name': 'Guest', 'emoji': '👤'},
     ]
     now = datetime.utcnow().isoformat()
     for p in defaults:
@@ -339,7 +336,7 @@ def api_movies_profiles_get():
             continue
         db.execute_query(
             'INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
-            (str(uuid.uuid4()), 'local_user', name, p.get('emoji') or '👤', now)
+            (p.get('id') or str(uuid.uuid4()), 'local_user', name, p.get('emoji') or '👤', now)
         )
 
     rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')

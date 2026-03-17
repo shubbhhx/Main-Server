@@ -213,7 +213,7 @@
       <span class="search-icon">🔍</span>
       <input type="text" id="search-input" placeholder="Search movies and shows..." autocomplete="off" spellcheck="false">
     </div>
-    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Shubham</span></a>
+    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Guest</span></a>
     <a href="/movies" class="back-btn">← Switch Profile</a>
     <a href="/" class="back-btn">← Portfolio</a>
   </div>
@@ -225,11 +225,11 @@
       <div class="profile-hero-strip">
         <div class="profile-hero-avatar" id="dash-avatar">👤</div>
         <div class="profile-hero-text">
-          <div class="profile-hero-name" id="dash-hero-name">Shubham</div>
+          <div class="profile-hero-name" id="dash-hero-name">Guest</div>
           <div class="profile-hero-status">Active Profile</div>
         </div>
       </div>
-      <div class="dash-title" id="dash-title">Shubham Dashboard</div>
+      <div class="dash-title" id="dash-title">Guest Dashboard</div>
       <div class="dash-sub">Resume · Wishlist · Suggested for You</div>
     </div>
 
@@ -410,9 +410,10 @@
   async function initProfileDashboard() {
     try {
       if (typeof bindGlobalSearchOverlay === 'function') bindGlobalSearchOverlay();
+      if (typeof resolveActiveProfile === 'function') await resolveActiveProfile();
 
       const p = _dashActiveProfile();
-      const name = (p && p.name) ? p.name : 'Shubham';
+      const name = (p && p.name) ? p.name : 'Guest';
       const emoji = (p && p.emoji) ? p.emoji : '👤';
       const nameEl = document.getElementById('profile-name-display');
       const titleEl = document.getElementById('dash-title');
@@ -428,10 +429,14 @@
         fetchLocalWishlist()
       ]);
 
-      renderResume(resumeItems || []);
+      const effectiveResumeItems = (resumeItems && resumeItems.length)
+        ? resumeItems
+        : (typeof getContinueWatching === 'function' ? getContinueWatching() : []);
+
+      renderResume(effectiveResumeItems || []);
       renderGrid(wishlistItems || [], 'wishlist-grid');
 
-      const suggested = await fetchSuggestedFromHistory(resumeItems || [], wishlistItems || []);
+      const suggested = await fetchSuggestedFromHistory(effectiveResumeItems || [], wishlistItems || []);
       renderGrid(suggested || [], 'suggested-grid');
     } catch (e) {
       const s = document.getElementById('suggested-grid');

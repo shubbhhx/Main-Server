@@ -40,10 +40,14 @@ FLIX_DB_PATH = os.path.join(DB_DIR, 'flix.db')
 ANALYTICS_DB_PATH = os.path.join(DB_DIR, 'analytics.db')
 
 DEFAULT_MOVIE_PROFILES = [
-    ('profile_shubham', 'local_user', 'Shubham', '🤖'),
-    ('profile_chill', 'local_user', 'Chill Mode', '🎮'),
-    ('profile_night', 'local_user', 'Night Owl', '🌙'),
-    ('profile_action', 'local_user', 'Action Fan', '⚡'),
+    ('guest', 'local_user', 'Guest', '👤'),
+]
+
+LEGACY_DUMMY_PROFILE_IDS = [
+    'profile_shubham',
+    'profile_chill',
+    'profile_night',
+    'profile_action',
 ]
 
 DB_NAME_TO_PATH = {
@@ -361,6 +365,12 @@ def _init_flix_db():
             INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, created_at)
             VALUES (?, ?, ?, ?, ?)
         ''', (profile_id, user_id, profile_name, avatar, now))
+
+    for legacy_profile_id in LEGACY_DUMMY_PROFILE_IDS:
+        c.execute('DELETE FROM watch_history WHERE profile_id = ?', (legacy_profile_id,))
+        c.execute('DELETE FROM resume_progress WHERE profile_id = ?', (legacy_profile_id,))
+        c.execute('DELETE FROM watchlist WHERE profile_id = ?', (legacy_profile_id,))
+        c.execute('DELETE FROM profiles WHERE id = ?', (legacy_profile_id,))
 
     conn.commit()
     conn.close()

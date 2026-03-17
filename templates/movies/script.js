@@ -27,6 +27,7 @@ const ALLOW_GLOBAL_LOADER = isPortfolioRoute();
 const _cache = {};
 const _posterCache = {};
 const _progressFlushTimers = {};
+const _pendingProgressPayloads = {};
 
 // ── PORTFOLIO THEME FX (BG + LOADER) ─────────────────────────
 function ensureThemeEffects() {
@@ -367,6 +368,43 @@ function _resumeKey(tmdbId) {
   return `toxibhflix_resume_${pid}_${tmdbId}`;
 }
 
+async function _postResumePayload(payload) {
+  try {
+    await fetch('/api/movies/resume-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ..._profileHeaders() },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {}
+}
+
+function _sendResumePayloadWithBeacon(payload) {
+  if (!navigator.sendBeacon) return false;
+  try {
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    return navigator.sendBeacon('/api/movies/resume-progress', blob);
+  } catch (e) {
+    return false;
+  }
+}
+
+function _flushPendingResumeProgress(useBeacon = false) {
+  Object.keys(_pendingProgressPayloads).forEach((flushKey) => {
+    const payload = _pendingProgressPayloads[flushKey];
+    if (!payload) return;
+
+    if (_progressFlushTimers[flushKey]) {
+      clearTimeout(_progressFlushTimers[flushKey]);
+      delete _progressFlushTimers[flushKey];
+    }
+
+    delete _pendingProgressPayloads[flushKey];
+
+    if (useBeacon && _sendResumePayloadWithBeacon(payload)) return;
+    _postResumePayload(payload);
+  });
+}
+
 function saveProgress(tmdbId, data) {
   // data: { mediaType, timestamp, season?, episode?, title, poster, progress }
   const key = _resumeKey(tmdbId);
@@ -402,15 +440,16 @@ function saveProgress(tmdbId, data) {
   };
 
   const flushKey = `${payload.content_type}:${payload.content_id}`;
-  if (_progressFlushTimers[flushKey]) clearTimeout(_progressFlushTimers[flushKey]);
-  _progressFlushTimers[flushKey] = setTimeout(async () => {
-    try {
-      await fetch('/api/movies/resume-progress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ..._profileHeaders() },
-        body: JSON.stringify(payload)
-      });
-    } catch (e) {}
+  _pendingProgressPayloads[flushKey] = payload;
+
+  if (_progressFlushTimers[flushKey]) return;
+
+  _progressFlushTimers[flushKey] = setTimeout(() => {
+    const latestPayload = _pendingProgressPayloads[flushKey];
+    delete _progressFlushTimers[flushKey];
+    if (!latestPayload) return;
+    delete _pendingProgressPayloads[flushKey];
+    _postResumePayload(latestPayload);
   }, 800);
 }
 
@@ -482,6 +521,16 @@ async function getServerContinueWatching() {
     return [];
   }
 }
+
+window.addEventListener('pagehide', () => {
+  _flushPendingResumeProgress(true);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    _flushPendingResumeProgress(true);
+  }
+});
 
 // Legacy helpers (unchanged for movie watch page compatibility)
 const PROG_KEY = 'cinematic_progress';
