@@ -74,9 +74,31 @@ def _torrent_cleanup_loop():
             if os.path.isdir(TORRENT_DIR):
                 now = time.time()
                 deleted = []
+                tracked_downloads = db.fetch_all(
+                    'SELECT content_path FROM downloaded_torrents WHERE content_path IS NOT NULL AND trim(content_path) <> ""',
+                    db_name='flix'
+                )
+                protected_paths = {
+                    os.path.abspath(os.path.expanduser(row.get('content_path', '')))
+                    for row in tracked_downloads
+                    if row.get('content_path')
+                }
                 for entry in os.listdir(TORRENT_DIR):
                     full = os.path.join(TORRENT_DIR, entry)
                     try:
+                        abs_full = os.path.abspath(full)
+                        keep_entry = False
+                        for protected in protected_paths:
+                            try:
+                                common = os.path.commonpath([abs_full, protected])
+                                if common == abs_full or common == protected:
+                                    keep_entry = True
+                                    break
+                            except Exception:
+                                continue
+                        if keep_entry:
+                            continue
+
                         age = now - os.path.getmtime(full)
                         if age > TTL_SECONDS:
                             if os.path.isdir(full):
@@ -1032,6 +1054,65 @@ def qbt_call(method, path, *, params=None, data=None):
         raise RuntimeError(body or f'qBittorrent API error ({resp.status_code})')
     return resp
 
+def _torrent_path_within_download_dir(path_value):
+    if not path_value:
+        return False
+    try:
+        base = os.path.abspath(QBITTORRENT_DOWNLOAD_DIR)
+        target = os.path.abspath(os.path.expanduser(path_value))
+        return os.path.commonpath([base, target]) == base
+    except Exception:
+        return False
+
+def _persist_downloaded_torrent(torrent_hash, name='', content_path='', total_size=0):
+    if not torrent_hash:
+        return False
+    now_iso = datetime.utcnow().isoformat()
+    safe_path = (content_path or '').strip()
+    if safe_path and not _torrent_path_within_download_dir(safe_path):
+        safe_path = ''
+    return db.execute_query(
+        '''
+        INSERT INTO downloaded_torrents (id, torrent_hash, name, content_path, total_size, removed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(torrent_hash) DO UPDATE SET
+            name = excluded.name,
+            content_path = excluded.content_path,
+            total_size = excluded.total_size,
+            removed_at = excluded.removed_at
+        ''',
+        (str(uuid.uuid4()), torrent_hash, name or torrent_hash, safe_path, int(total_size or 0), now_iso),
+        db_name='flix'
+    )
+
+def _list_downloaded_torrents():
+    rows = db.fetch_all(
+        '''
+        SELECT id, torrent_hash, name, content_path, total_size, removed_at
+        FROM downloaded_torrents
+        ORDER BY removed_at DESC
+        ''',
+        db_name='flix'
+    )
+    items = []
+    for row in rows:
+        content_path = (row.get('content_path') or '').strip()
+        exists_on_disk = bool(content_path and os.path.exists(os.path.expanduser(content_path)))
+        total = int(row.get('total_size', 0) or 0)
+        items.append({
+            'id': row.get('id'),
+            'gid': row.get('torrent_hash'),
+            'hash': row.get('torrent_hash'),
+            'name': row.get('name') or row.get('torrent_hash'),
+            'status': 'downloaded',
+            'totalLength': str(total),
+            'completedLength': str(total),
+            'contentPath': content_path,
+            'exists': exists_on_disk,
+            'removedAt': row.get('removed_at'),
+        })
+    return items
+
 def _qbt_to_stream_status(torrent_hash):
     info_resp = qbt_call('GET', '/api/v2/torrents/info', params={'hashes': torrent_hash})
     infos = info_resp.json() or []
@@ -1213,15 +1294,52 @@ def api_torrent_list():
             else:
                 stopped.append(mapped)
 
-        return jsonify({'active': active, 'waiting': waiting, 'stopped': stopped})
+        downloaded = _list_downloaded_torrents()
+        return jsonify({'active': active, 'waiting': waiting, 'stopped': stopped, 'downloaded': downloaded})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/torrent/remove/<gid>', methods=['DELETE'])
 def api_torrent_remove(gid):
     try:
+        infos = qbt_call('GET', '/api/v2/torrents/info', params={'hashes': gid}).json() or []
+        info = infos[0] if infos else {}
+        name = info.get('name') or gid
+        content_path = info.get('content_path') or ''
+        if not content_path and name:
+            content_path = os.path.join(QBITTORRENT_DOWNLOAD_DIR, name)
+        total_size = int(info.get('total_size', 0) or 0)
+
         qbt_call('POST', '/api/v2/torrents/delete', data={'hashes': gid, 'deleteFiles': 'false'})
-        return jsonify({'ok': True})
+        _persist_downloaded_torrent(gid, name=name, content_path=content_path, total_size=total_size)
+        return jsonify({'ok': True, 'movedToDownloaded': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/torrent/downloaded/<downloaded_id>', methods=['DELETE'])
+def api_torrent_delete_downloaded(downloaded_id):
+    try:
+        row = db.fetch_one(
+            'SELECT id, content_path FROM downloaded_torrents WHERE id = ?',
+            (downloaded_id,),
+            db_name='flix'
+        )
+        if not row:
+            return jsonify({'error': 'Downloaded torrent not found'}), 404
+
+        deleted_files = False
+        content_path = (row.get('content_path') or '').strip()
+        if content_path:
+            abs_path = os.path.abspath(os.path.expanduser(content_path))
+            if _torrent_path_within_download_dir(abs_path) and os.path.exists(abs_path):
+                if os.path.isdir(abs_path):
+                    shutil.rmtree(abs_path, ignore_errors=True)
+                else:
+                    os.remove(abs_path)
+                deleted_files = True
+
+        db.execute_query('DELETE FROM downloaded_torrents WHERE id = ?', (downloaded_id,), db_name='flix')
+        return jsonify({'ok': True, 'deletedFiles': deleted_files})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

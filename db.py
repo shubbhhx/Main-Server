@@ -73,6 +73,7 @@ TABLE_TO_DB = {
     'watch_history': 'flix',
     'resume_progress': 'flix',
     'watchlist': 'flix',
+    'downloaded_torrents': 'flix',
 
     'daily_visitors': 'analytics',
     'request_logs': 'analytics',
@@ -332,9 +333,21 @@ def _init_flix_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS downloaded_torrents (
+            id TEXT PRIMARY KEY,
+            torrent_hash TEXT NOT NULL UNIQUE,
+            name TEXT,
+            content_path TEXT,
+            total_size INTEGER DEFAULT 0,
+            removed_at TEXT NOT NULL
+        )
+    ''')
+
     c.execute('CREATE INDEX IF NOT EXISTS idx_watch_history_profile_time ON watch_history(profile_id, last_watched DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_resume_profile_updated ON resume_progress(profile_id, updated_at DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_profile_added ON watchlist(profile_id, added_at DESC)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_downloaded_torrents_removed ON downloaded_torrents(removed_at DESC)')
 
     c.execute('''
         CREATE VIEW IF NOT EXISTS Profiles AS
