@@ -970,7 +970,7 @@ def tmdb_image_proxy():
 
 
 # ── QBITTORRENT TORRENT STREAMING API ──────────────────────────
-QBITTORRENT_URL = os.environ.get('QBITTORRENT_URL', 'http://localhost:8080').rstrip('/')
+QBITTORRENT_URL = os.environ.get('QBITTORRENT_URL', 'http://localhost:8090').rstrip('/')
 QBITTORRENT_USER = os.environ.get('QBITTORRENT_USER', 'admin')
 QBITTORRENT_PASS = os.environ.get('QBITTORRENT_PASS', 'hello6969')
 QBITTORRENT_DOWNLOAD_DIR = os.path.expanduser(

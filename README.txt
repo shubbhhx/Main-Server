@@ -68,7 +68,7 @@ Recommended flow in Termux:
 Set these env vars before running Flask (same machine):
   export QBITTORRENT_URL=http://127.0.0.1:8090
   export QBITTORRENT_USER=admin
-  export QBITTORRENT_PASS=adminadmin
+  export QBITTORRENT_PASS=hello6969
   export QBITTORRENT_DOWNLOAD_DIR=~/torrents
 
 If you still use old ARIA2_DIR env var, app.py keeps fallback compatibility,
@@ -83,7 +83,7 @@ Windows PowerShell (Flask app):
   .\.venv\Scripts\Activate.ps1
   $env:QBITTORRENT_URL="http://127.0.0.1:8090"
   $env:QBITTORRENT_USER="admin"
-  $env:QBITTORRENT_PASS="adminadmin"
+  $env:QBITTORRENT_PASS="hello6969"
   $env:QBITTORRENT_DOWNLOAD_DIR="C:\torrents"
   python app.py
 
@@ -116,7 +116,7 @@ In another Termux tab, run Flask with env vars:
   cd ~/toxibh-flask
   export QBITTORRENT_URL=http://127.0.0.1:8090
   export QBITTORRENT_USER=admin
-  export QBITTORRENT_PASS=adminadmin
+  export QBITTORRENT_PASS=hello6969
   export QBITTORRENT_DOWNLOAD_DIR=~/torrents
   python app.py
 
@@ -134,7 +134,7 @@ Optional: run both services in one tmux session:
   cd ~/toxibh-flask
   export QBITTORRENT_URL=http://127.0.0.1:8090
   export QBITTORRENT_USER=admin
-  export QBITTORRENT_PASS=adminadmin
+  export QBITTORRENT_PASS=hello6969
   export QBITTORRENT_DOWNLOAD_DIR=~/torrents
   python app.py
   # Detach: Ctrl+B then D
