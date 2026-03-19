@@ -63,10 +63,10 @@ Recommended flow in Termux:
   proot-distro login ubuntu
   apt update && apt install qbittorrent-nox -y
   mkdir -p ~/torrents
-  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+  qbittorrent-nox --webui-port=8090 --profile=/root/.config/qBittorrent
 
 Set these env vars before running Flask (same machine):
-  export QBITTORRENT_URL=http://127.0.0.1:8080
+  export QBITTORRENT_URL=http://127.0.0.1:8090
   export QBITTORRENT_USER=admin
   export QBITTORRENT_PASS=adminadmin
   export QBITTORRENT_DOWNLOAD_DIR=~/torrents
@@ -81,7 +81,7 @@ but qBittorrent vars are preferred.
 Windows PowerShell (Flask app):
   cd E:\Website\Main-Server
   .\.venv\Scripts\Activate.ps1
-  $env:QBITTORRENT_URL="http://127.0.0.1:8080"
+  $env:QBITTORRENT_URL="http://127.0.0.1:8090"
   $env:QBITTORRENT_USER="admin"
   $env:QBITTORRENT_PASS="adminadmin"
   $env:QBITTORRENT_DOWNLOAD_DIR="C:\torrents"
@@ -90,7 +90,7 @@ Windows PowerShell (Flask app):
 Termux (qBittorrent service):
   pkg install proot-distro -y
   proot-distro login ubuntu
-  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+  qbittorrent-nox --webui-port=8090 --profile=/root/.config/qBittorrent
 
 Open in browser:
   http://localhost:5000/movies/torrent
@@ -110,11 +110,11 @@ Start qBittorrent in Ubuntu userspace:
   proot-distro login ubuntu
   apt update && apt install qbittorrent-nox -y
   mkdir -p ~/torrents
-  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+  qbittorrent-nox --webui-port=8090 --profile=/root/.config/qBittorrent
 
 In another Termux tab, run Flask with env vars:
   cd ~/toxibh-flask
-  export QBITTORRENT_URL=http://127.0.0.1:8080
+  export QBITTORRENT_URL=http://127.0.0.1:8090
   export QBITTORRENT_USER=admin
   export QBITTORRENT_PASS=adminadmin
   export QBITTORRENT_DOWNLOAD_DIR=~/torrents
@@ -128,11 +128,11 @@ Optional: run both services in one tmux session:
   tmux new -s toxibh
   # Pane 1: start qBittorrent
   proot-distro login ubuntu
-  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+  qbittorrent-nox --webui-port=8090 --profile=/root/.config/qBittorrent
   # Split pane: Ctrl+B then %
   # Pane 2: start Flask
   cd ~/toxibh-flask
-  export QBITTORRENT_URL=http://127.0.0.1:8080
+  export QBITTORRENT_URL=http://127.0.0.1:8090
   export QBITTORRENT_USER=admin
   export QBITTORRENT_PASS=adminadmin
   export QBITTORRENT_DOWNLOAD_DIR=~/torrents
