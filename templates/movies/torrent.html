@@ -24,15 +24,15 @@ header{position:fixed;top:3px;left:0;right:0;z-index:100;height:54px;display:fle
 
 main{padding:78px 18px 60px;max-width:1060px;margin:0 auto;position:relative;z-index:2}
 
-/* ── ARIA2 STATUS BAR ── */
-#aria2-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border:1px solid rgba(0,245,255,.1);background:rgba(2,4,8,.6);border-radius:3px;margin-bottom:14px;font-family:'Share Tech Mono',monospace;font-size:.65rem}
-.aria2-dot{width:8px;height:8px;border-radius:50%;background:var(--magenta);flex-shrink:0}
-.aria2-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(0,255,136,.5);animation:pulse-g 2s infinite}
-.aria2-dot.checking{background:var(--gold);animation:pulse-y 1s infinite}
+/* ── QBITTORRENT STATUS BAR ── */
+#qbt-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border:1px solid rgba(0,245,255,.1);background:rgba(2,4,8,.6);border-radius:3px;margin-bottom:14px;font-family:'Share Tech Mono',monospace;font-size:.65rem}
+.qbt-dot{width:8px;height:8px;border-radius:50%;background:var(--magenta);flex-shrink:0}
+.qbt-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(0,255,136,.5);animation:pulse-g 2s infinite}
+.qbt-dot.checking{background:var(--gold);animation:pulse-y 1s infinite}
 @keyframes pulse-g{0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,.45)}70%{box-shadow:0 0 0 6px rgba(0,255,136,0)}}
 @keyframes pulse-y{0%,100%{opacity:1}50%{opacity:.3}}
-#aria2-ver{color:rgba(0,255,136,.7);margin-left:auto}
-.aria2-err{color:var(--magenta)}
+#qbt-ver{color:rgba(0,255,136,.7);margin-left:auto}
+.qbt-err{color:var(--magenta)}
 
 /* ── CARD ── */
 .card{background:rgba(4,13,26,.9);border:1px solid rgba(0,245,255,.15);border-radius:4px;padding:22px;margin-bottom:14px}
@@ -154,41 +154,36 @@ main{padding:78px 18px 60px;max-width:1060px;margin:0 auto;position:relative;z-i
 
 <main>
 
-  <!-- ARIA2 STATUS -->
-  <div id="aria2-bar">
-    <div class="aria2-dot checking" id="aria2-dot"></div>
-    <span id="aria2-msg" style="font-family:'Share Tech Mono',monospace;font-size:.63rem">Checking aria2 daemon…</span>
-    <span id="aria2-ver"></span>
-    <button class="mbtn" onclick="checkAria2()" style="margin-left:8px">↻ RETRY</button>
+  <!-- QBITTORRENT STATUS -->
+  <div id="qbt-bar">
+    <div class="qbt-dot checking" id="qbt-dot"></div>
+    <span id="qbt-msg" style="font-family:'Share Tech Mono',monospace;font-size:.63rem">Checking qBittorrent WebUI…</span>
+    <span id="qbt-ver"></span>
+    <button class="mbtn" onclick="checkQbittorrent()" style="margin-left:8px">↻ RETRY</button>
     <button class="mbtn" onclick="document.getElementById('setup-guide').style.display='block'" style="margin-left:4px">? SETUP</button>
   </div>
 
   <!-- SETUP GUIDE (hidden by default) -->
   <div id="setup-guide">
-    <div class="sg-title">⚙ aria2 Setup (Termux / Linux)</div>
-    <div class="code-block"># 1. Install aria2 in Termux
-pkg install aria2
+    <div class="sg-title">⚙ qBittorrent Setup (Termux / Linux)</div>
+    <div class="code-block"># 1. Install base tools in Termux
+pkg update && pkg upgrade -y
+pkg install proot-distro -y
 
-# 2. Create download folder
+# 2. Install Ubuntu userspace
+proot-distro install ubuntu
+proot-distro login ubuntu
+
+# 3. Inside Ubuntu, install qBittorrent (headless)
+apt update && apt install qbittorrent-nox -y
+
+# 4. Create download folder
 mkdir -p ~/torrents
 
-# 3. Start aria2 with RPC (run once or add to startup)
-aria2c --enable-rpc=true \
-  --rpc-listen-all=true \
-  --rpc-allow-origin-all=true \
-  --rpc-secret=toxibhflix123 \
-  --rpc-listen-port=6800 \
-  --dir=~/torrents \
-  --seed-ratio=0 \
-  --seed-time=0 \
-  --max-connection-per-server=4 \
-  --split=4 \
-  --bt-enable-lpd=true \
-  --enable-dht=true \
-  --check-certificate=false \
-  --daemon=true</div>
-    <div class="sg-note">⚠ aria2 must run on the SAME machine as Flask (localhost:6800).<br>
-    The RPC secret <strong>toxibhflix123</strong> is set in app.py as ARIA2_SECRET. You can change it via env var.</div>
+# 5. Start qBittorrent WebUI (default: http://127.0.0.1:8080)
+qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent</div>
+    <div class="sg-note">⚠ qBittorrent WebUI must run on the SAME machine as Flask (localhost:8080).<br>
+    Configure credentials in app.py env vars: <strong>QBITTORRENT_USER</strong>, <strong>QBITTORRENT_PASS</strong>, <strong>QBITTORRENT_URL</strong>.</div>
   </div>
 
   <!-- MAGNET INPUT -->
@@ -202,7 +197,7 @@ aria2c --enable-rpc=true \
       <button class="btn-out" id="btn-stop" onclick="removeCurrent()">⏹ REMOVE</button>
     </div>
     <div style="margin-top:9px;font-family:'Share Tech Mono',monospace;font-size:.55rem;color:rgba(200,232,255,.2);line-height:1.7">
-      aria2 downloads pieces sequentially. Flask streams the file directly to your browser — no CDN, no WebRTC.
+      qBittorrent downloads pieces sequentially. Flask streams the file directly to your browser — no CDN, no WebRTC.
     </div>
   </div>
 
@@ -349,7 +344,7 @@ let currentGid = null;
 let pollTimer = null;
 let topVal = 0, topTimer = null;
 let curSubs = [], subsOn = true;
-let aria2Ok = false;
+let qbtOk = false;
 
 // ── TOP BAR ──
 function topStart() {
@@ -367,27 +362,27 @@ function setStep(n) { [0,1,2,3].forEach((i,_)=>{ const e=document.getElementById
 // ── STATUS ──
 function setStatus(msg) { document.getElementById('status-msg').innerHTML = `<span class="sdot"></span>${msg}`; }
 
-// ── ARIA2 CHECK ──
-async function checkAria2() {
-  const dot = document.getElementById('aria2-dot');
-  const msg = document.getElementById('aria2-msg');
-  const ver = document.getElementById('aria2-ver');
-  dot.className = 'aria2-dot checking'; msg.textContent = 'Checking aria2…'; ver.textContent = '';
+// ── QBITTORRENT CHECK ──
+async function checkQbittorrent() {
+  const dot = document.getElementById('qbt-dot');
+  const msg = document.getElementById('qbt-msg');
+  const ver = document.getElementById('qbt-ver');
+  dot.className = 'qbt-dot checking'; msg.textContent = 'Checking qBittorrent…'; ver.textContent = '';
   try {
     const r = await fetch('/api/torrent/ping');
     const d = await r.json();
     if (d.ok) {
-      dot.className = 'aria2-dot ok';
-      msg.textContent = 'aria2 is running'; ver.textContent = `v${d.version}`;
-      aria2Ok = true;
+      dot.className = 'qbt-dot ok';
+      msg.textContent = 'qBittorrent is running'; ver.textContent = `v${d.version}`;
+      qbtOk = true;
       document.getElementById('setup-guide').style.display = 'none';
       loadActiveTorrents();
     } else {
-      dot.className = 'aria2-dot'; msg.innerHTML = `<span class="aria2-err">aria2 not running — ${d.error}</span>`;
+      dot.className = 'qbt-dot'; msg.innerHTML = `<span class="qbt-err">qBittorrent not running — ${d.error}</span>`;
       document.getElementById('setup-guide').style.display = 'block';
     }
   } catch(e) {
-    dot.className = 'aria2-dot'; msg.innerHTML = `<span class="aria2-err">Cannot reach aria2: ${e.message}</span>`;
+    dot.className = 'qbt-dot'; msg.innerHTML = `<span class="qbt-err">Cannot reach qBittorrent: ${e.message}</span>`;
     document.getElementById('setup-guide').style.display = 'block';
   }
 }
@@ -421,12 +416,12 @@ async function loadActiveTorrents() {
 async function addTorrent() {
   const magnet = document.getElementById('magnet-url').value.trim();
   if (!magnet || !magnet.startsWith('magnet:')) { toast('Paste a valid magnet: link'); return; }
-  if (!aria2Ok) { toast('aria2 is not running — see setup guide'); checkAria2(); return; }
+  if (!qbtOk) { toast('qBittorrent is not running — see setup guide'); checkQbittorrent(); return; }
 
   document.getElementById('btn-go').disabled = true;
   document.getElementById('btn-stop').style.display = 'inline-block';
   document.getElementById('dl-area').style.display = 'block';
-  topStart(); setStep(0); setStatus('Sending magnet to aria2…');
+  topStart(); setStep(0); setStatus('Sending magnet to qBittorrent…');
 
   try {
     const r = await fetch('/api/torrent/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({magnet}) });
@@ -619,7 +614,7 @@ let _tt; function toast(m){const t=document.getElementById('toast');t.textConten
 document.getElementById('magnet-url').addEventListener('keydown',e=>{if(e.key==='Enter')addTorrent();});
 
 // ── INIT ──
-checkAria2();
+checkQbittorrent();
 </script>
 </body>
 </html>

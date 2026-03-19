@@ -51,7 +51,96 @@ If Pillow fails on Termux:
   pip install pillow --no-binary pillow
 
 ═══════════════════════════════════════════════════════════
-  STEP 4 — RUN THE SERVER
+  STEP 4 — QBITTORRENT SETUP (TERMUX / OPPO A11K)
+═══════════════════════════════════════════════════════════
+
+Torrent streaming now uses qBittorrent WebUI instead of aria2.
+
+Recommended flow in Termux:
+  pkg update && pkg upgrade -y
+  pkg install proot-distro -y
+  proot-distro install ubuntu
+  proot-distro login ubuntu
+  apt update && apt install qbittorrent-nox -y
+  mkdir -p ~/torrents
+  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+
+Set these env vars before running Flask (same machine):
+  export QBITTORRENT_URL=http://127.0.0.1:8080
+  export QBITTORRENT_USER=admin
+  export QBITTORRENT_PASS=adminadmin
+  export QBITTORRENT_DOWNLOAD_DIR=~/torrents
+
+If you still use old ARIA2_DIR env var, app.py keeps fallback compatibility,
+but qBittorrent vars are preferred.
+
+═══════════════════════════════════════════════════════════
+  QUICK START — WINDOWS + TERMUX (SIDE BY SIDE)
+═══════════════════════════════════════════════════════════
+
+Windows PowerShell (Flask app):
+  cd E:\Website\Main-Server
+  .\.venv\Scripts\Activate.ps1
+  $env:QBITTORRENT_URL="http://127.0.0.1:8080"
+  $env:QBITTORRENT_USER="admin"
+  $env:QBITTORRENT_PASS="adminadmin"
+  $env:QBITTORRENT_DOWNLOAD_DIR="C:\torrents"
+  python app.py
+
+Termux (qBittorrent service):
+  pkg install proot-distro -y
+  proot-distro login ubuntu
+  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+
+Open in browser:
+  http://localhost:5000/movies/torrent
+
+═══════════════════════════════════════════════════════════
+  QUICK START — ALL IN TERMUX (NO WINDOWS)
+═══════════════════════════════════════════════════════════
+
+Run everything directly on phone (Oppo A11K):
+  cd ~/toxibh-flask
+  pkg update && pkg upgrade -y
+  pkg install python python-pip proot-distro -y
+  pip install -r requirements.txt
+
+Start qBittorrent in Ubuntu userspace:
+  proot-distro install ubuntu
+  proot-distro login ubuntu
+  apt update && apt install qbittorrent-nox -y
+  mkdir -p ~/torrents
+  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+
+In another Termux tab, run Flask with env vars:
+  cd ~/toxibh-flask
+  export QBITTORRENT_URL=http://127.0.0.1:8080
+  export QBITTORRENT_USER=admin
+  export QBITTORRENT_PASS=adminadmin
+  export QBITTORRENT_DOWNLOAD_DIR=~/torrents
+  python app.py
+
+Open in browser:
+  http://localhost:5000/movies/torrent
+
+Optional: run both services in one tmux session:
+  pkg install tmux -y
+  tmux new -s toxibh
+  # Pane 1: start qBittorrent
+  proot-distro login ubuntu
+  qbittorrent-nox --webui-port=8080 --profile=/root/.config/qBittorrent
+  # Split pane: Ctrl+B then %
+  # Pane 2: start Flask
+  cd ~/toxibh-flask
+  export QBITTORRENT_URL=http://127.0.0.1:8080
+  export QBITTORRENT_USER=admin
+  export QBITTORRENT_PASS=adminadmin
+  export QBITTORRENT_DOWNLOAD_DIR=~/torrents
+  python app.py
+  # Detach: Ctrl+B then D
+
+═══════════════════════════════════════════════════════════
+  STEP 5 — RUN THE SERVER
 ═══════════════════════════════════════════════════════════
 
 python app.py
@@ -62,7 +151,7 @@ You'll see:
      Admin      :  http://localhost:5000/admin
 
 ═══════════════════════════════════════════════════════════
-  STEP 5 — GET YOUR TERMUX IP FOR NETWORK ACCESS
+  STEP 6 — GET YOUR TERMUX IP FOR NETWORK ACCESS
 ═══════════════════════════════════════════════════════════
 
 In a new Termux session run:
@@ -73,20 +162,6 @@ Look for: inet 192.168.X.XXX
 Then from any device on same WiFi:
   http://192.168.X.XXX:8080         ← Portfolio
   http://192.168.X.XXX:8080/admin   ← Admin Panel
-═══════════════════════════════════════════════════════════
-  STEP 6 — KEEP RUNNING IN BACKGROUND (tmux)
-═══════════════════════════════════════════════════════════
-
-pkg install tmux -y
-
-Start a persistent session:
-  tmux new -s toxibh
-  cd ~/toxibh-flask && python app.py
-
-Detach (keep running):  Ctrl+B  then  D
-Reattach later:         tmux attach -t toxibh
-Kill session:           tmux kill-session -t toxibh
-
 ═══════════════════════════════════════════════════════════
   STEP 7 — EXPOSE TO INTERNET VIA NGROK (optional)
 ═══════════════════════════════════════════════════════════

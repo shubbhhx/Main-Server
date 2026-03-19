@@ -5,6 +5,7 @@
 
 import os, uuid, bcrypt, mimetypes, json, time, re, logging
 import urllib.request, urllib.error
+from urllib.parse import parse_qs, urlparse
 import requests as req_session   # for Vidking proxy (streaming)
 from datetime import datetime, timedelta
 from functools import wraps
@@ -61,7 +62,11 @@ import threading, shutil
 
 def _torrent_cleanup_loop():
     """Background thread: delete torrent files older than 24 hours."""
-    TORRENT_DIR = os.path.expanduser('~/torrents')
+    TORRENT_DIR = os.path.expanduser(
+        os.environ.get('QBITTORRENT_DOWNLOAD_DIR')
+        or os.environ.get('ARIA2_DIR')
+        or '~/torrents'
+    )
     TTL_SECONDS = 24 * 60 * 60  # 1 day
     CHECK_EVERY = 60 * 60       # check every 1 hour
     while True:
@@ -964,10 +969,15 @@ def tmdb_image_proxy():
     return resp
 
 
-# ── ARIA2 TORRENT STREAMING API ────────────────────────────────
-ARIA2_RPC  = os.environ.get('ARIA2_RPC', 'http://localhost:6800/jsonrpc')
-ARIA2_SEC  = os.environ.get('ARIA2_SECRET', 'toxibhflix123')
-ARIA2_DIR  = os.path.expanduser(os.environ.get('ARIA2_DIR', '~/torrents'))
+# ── QBITTORRENT TORRENT STREAMING API ──────────────────────────
+QBITTORRENT_URL = os.environ.get('QBITTORRENT_URL', 'http://localhost:8080').rstrip('/')
+QBITTORRENT_USER = os.environ.get('QBITTORRENT_USER', 'admin')
+QBITTORRENT_PASS = os.environ.get('QBITTORRENT_PASS', 'adminadmin')
+QBITTORRENT_DOWNLOAD_DIR = os.path.expanduser(
+    os.environ.get('QBITTORRENT_DOWNLOAD_DIR')
+    or os.environ.get('ARIA2_DIR')
+    or '~/torrents'
+)
 
 VIDEO_EXTS = ('.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.ogv', '.wmv')
 MIME_MAP   = {
@@ -976,28 +986,123 @@ MIME_MAP   = {
     'mov': 'video/quicktime', 'm4v': 'video/x-m4v', 'wmv': 'video/x-ms-wmv',
 }
 
-def aria2_call(method, params=None):
-    """Call aria2 JSON-RPC and return result or raise."""
-    payload = json.dumps({
-        'jsonrpc': '2.0', 'id': 'tfx', 'method': method,
-        'params': [f'token:{ARIA2_SEC}'] + (params or [])
-    }).encode()
-    req = urllib.request.Request(
-        ARIA2_RPC, data=payload,
-        headers={'Content-Type': 'application/json'}, method='POST'
-    )
-    with urllib.request.urlopen(req, timeout=5) as r:
-        data = json.loads(r.read())
-    if 'error' in data:
-        raise RuntimeError(data['error'].get('message', 'aria2 error'))
-    return data.get('result')
+_qbt_session = None
+
+def _extract_btih(magnet):
+    """Extract BTIH hash from magnet; return lowercase v1 hash when available."""
+    try:
+        parsed = urlparse(magnet)
+        xt_values = parse_qs(parsed.query).get('xt', [])
+        for value in xt_values:
+            if value.lower().startswith('urn:btih:'):
+                btih = value.split(':')[-1].strip()
+                if re.fullmatch(r'[a-fA-F0-9]{40}', btih):
+                    return btih.lower()
+    except Exception:
+        pass
+    return None
+
+def _qbt_get_session(force_login=False):
+    global _qbt_session
+    if _qbt_session is None:
+        _qbt_session = req_session.Session()
+
+    if force_login:
+        login_resp = _qbt_session.post(
+            f'{QBITTORRENT_URL}/api/v2/auth/login',
+            data={'username': QBITTORRENT_USER, 'password': QBITTORRENT_PASS},
+            timeout=8,
+        )
+        if login_resp.status_code >= 400 or login_resp.text.strip() != 'Ok.':
+            raise RuntimeError('qBittorrent login failed. Check QBITTORRENT_USER/QBITTORRENT_PASS.')
+    return _qbt_session
+
+def qbt_call(method, path, *, params=None, data=None):
+    """Call qBittorrent Web API and return response object or raise."""
+    session_obj = _qbt_get_session(force_login=False)
+    url = f'{QBITTORRENT_URL}{path}'
+    resp = session_obj.request(method, url, params=params, data=data, timeout=8)
+
+    if resp.status_code in (401, 403):
+        session_obj = _qbt_get_session(force_login=True)
+        resp = session_obj.request(method, url, params=params, data=data, timeout=8)
+
+    if resp.status_code >= 400:
+        body = (resp.text or '').strip()
+        raise RuntimeError(body or f'qBittorrent API error ({resp.status_code})')
+    return resp
+
+def _qbt_to_stream_status(torrent_hash):
+    info_resp = qbt_call('GET', '/api/v2/torrents/info', params={'hashes': torrent_hash})
+    infos = info_resp.json() or []
+    if not infos:
+        raise RuntimeError('Torrent not found')
+
+    info = infos[0]
+    files_resp = qbt_call('GET', '/api/v2/torrents/files', params={'hash': torrent_hash})
+    files_data = files_resp.json() or []
+
+    content_path = info.get('content_path') or ''
+    base_dir = content_path if os.path.isdir(content_path) else os.path.dirname(content_path)
+
+    files = []
+    for idx, file_item in enumerate(files_data):
+        rel_name = file_item.get('name', '')
+        abs_path = os.path.join(base_dir, rel_name) if base_dir else rel_name
+        ext = os.path.splitext(rel_name)[1].lower()
+        files.append({
+            'index': str(file_item.get('index', idx)),
+            'path': abs_path,
+            'name': rel_name,
+            'length': str(int(file_item.get('size', 0))),
+            'completedLength': str(int(file_item.get('progress', 0) * file_item.get('size', 0))),
+            'selected': 'true' if int(file_item.get('priority', 1)) > 0 else 'false',
+            'is_video': ext in VIDEO_EXTS,
+        })
+
+    total_length = int(info.get('total_size', 0) or 0)
+    completed_length = int(total_length * float(info.get('progress', 0) or 0))
+
+    raw_state = info.get('state', '')
+    state_map = {
+        'downloading': 'active',
+        'forcedDL': 'active',
+        'metaDL': 'active',
+        'checkingDL': 'active',
+        'stalledDL': 'active',
+        'uploading': 'active',
+        'forcedUP': 'active',
+        'stalledUP': 'active',
+        'queuedDL': 'waiting',
+        'queuedUP': 'waiting',
+        'checkingResumeData': 'waiting',
+        'moving': 'waiting',
+        'pausedDL': 'paused',
+        'pausedUP': 'paused',
+        'error': 'error',
+        'missingFiles': 'error',
+    }
+    mapped_status = state_map.get(raw_state, 'complete' if int(info.get('completion_on', 0) or 0) > 0 else raw_state)
+
+    return {
+        'gid': info.get('hash', torrent_hash),
+        'status': mapped_status,
+        'totalLength': str(total_length),
+        'completedLength': str(completed_length),
+        'downloadSpeed': str(int(info.get('dlspeed', 0) or 0)),
+        'uploadSpeed': str(int(info.get('upspeed', 0) or 0)),
+        'connections': str(int(info.get('num_leechs', 0) or 0) + int(info.get('num_seeds', 0) or 0)),
+        'bittorrent': {'info': {'name': info.get('name') or info.get('hash', torrent_hash)}},
+        'files': files,
+        'errorMessage': info.get('state_description') or raw_state,
+    }
 
 @app.route('/api/torrent/ping')
 def api_torrent_ping():
-    """Check if aria2 is reachable."""
+    """Check if qBittorrent Web API is reachable."""
     try:
-        v = aria2_call('aria2.getVersion')
-        return jsonify({'ok': True, 'version': v.get('version', '?')})
+        v = qbt_call('GET', '/api/v2/app/version').text.strip()
+        return jsonify({'ok': True, 'version': v})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
@@ -1008,7 +1113,27 @@ def api_torrent_add():
     if not magnet.startswith('magnet:'):
         return jsonify({'error': 'Invalid magnet link'}), 400
     try:
-        gid = aria2_call('aria2.addUri', [[magnet], {'dir': ARIA2_DIR, 'seed-ratio': '0'}])
+        qbt_call(
+            'POST',
+            '/api/v2/torrents/add',
+            data={
+                'urls': magnet,
+                'savepath': QBITTORRENT_DOWNLOAD_DIR,
+                'sequentialDownload': 'true',
+                'firstLastPiecePrio': 'true',
+                'autoTMM': 'false',
+            },
+        )
+
+        gid = _extract_btih(magnet)
+        if not gid:
+            latest = qbt_call('GET', '/api/v2/torrents/info', params={'limit': 50}).json() or []
+            if latest:
+                gid = max(latest, key=lambda item: int(item.get('added_on', 0) or 0)).get('hash')
+
+        if not gid:
+            return jsonify({'error': 'Torrent added but could not resolve hash'}), 500
+
         return jsonify({'gid': gid})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1016,12 +1141,7 @@ def api_torrent_add():
 @app.route('/api/torrent/status/<gid>')
 def api_torrent_status(gid):
     try:
-        s = aria2_call('aria2.tellStatus', [gid])
-        # Identify video files
-        files = s.get('files', [])
-        for f in files:
-            ext = os.path.splitext(f.get('path', ''))[1].lower()
-            f['is_video'] = ext in VIDEO_EXTS
+        s = _qbt_to_stream_status(gid)
         return jsonify(s)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1029,9 +1149,33 @@ def api_torrent_status(gid):
 @app.route('/api/torrent/list')
 def api_torrent_list():
     try:
-        active  = aria2_call('aria2.tellActive') or []
-        waiting = aria2_call('aria2.tellWaiting', [0, 20]) or []
-        stopped = aria2_call('aria2.tellStopped', [0, 10]) or []
+        all_items = qbt_call('GET', '/api/v2/torrents/info').json() or []
+
+        active_states = {'downloading', 'forcedDL', 'metaDL', 'checkingDL', 'stalledDL'}
+        waiting_states = {'queuedDL', 'queuedUP', 'checkingResumeData', 'moving'}
+
+        active, waiting, stopped = [], [], []
+        for item in all_items:
+            mapped = {
+                'gid': item.get('hash'),
+                'hash': item.get('hash'),
+                'status': item.get('state', ''),
+                'totalLength': str(int(item.get('total_size', 0) or 0)),
+                'completedLength': str(int((item.get('total_size', 0) or 0) * float(item.get('progress', 0) or 0))),
+                'downloadSpeed': str(int(item.get('dlspeed', 0) or 0)),
+                'uploadSpeed': str(int(item.get('upspeed', 0) or 0)),
+                'bittorrent': {'info': {'name': item.get('name') or item.get('hash')}},
+                'files': [{'path': item.get('content_path', '')}],
+            }
+
+            state = item.get('state', '')
+            if state in active_states:
+                active.append(mapped)
+            elif state in waiting_states:
+                waiting.append(mapped)
+            else:
+                stopped.append(mapped)
+
         return jsonify({'active': active, 'waiting': waiting, 'stopped': stopped})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1039,7 +1183,7 @@ def api_torrent_list():
 @app.route('/api/torrent/remove/<gid>', methods=['DELETE'])
 def api_torrent_remove(gid):
     try:
-        aria2_call('aria2.forceRemove', [gid])
+        qbt_call('POST', '/api/v2/torrents/delete', data={'hashes': gid, 'deleteFiles': 'false'})
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1049,7 +1193,7 @@ def api_torrent_stream(gid):
     """Stream the largest video file in a torrent via Range requests."""
     try:
         file_idx = request.args.get('file', None)
-        s = aria2_call('aria2.tellStatus', [gid])
+        s = _qbt_to_stream_status(gid)
         files = s.get('files', [])
 
         # Find video file (by index param or largest video)
