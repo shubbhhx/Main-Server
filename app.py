@@ -1106,6 +1106,23 @@ def api_torrent_ping():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
+def _print_qbt_startup_healthcheck():
+    print(f'   qBittorrent URL :  {QBITTORRENT_URL}')
+    try:
+        version = qbt_call('GET', '/api/v2/app/version').text.strip()
+        print(f'   qBittorrent OK  :  version {version}')
+    except req_session.RequestException as e:
+        print('   qBittorrent WARN:  WebUI not reachable')
+        print(f'      Details       :  {e}')
+        print('      Fix           :  Start qBittorrent WebUI and set QBITTORRENT_URL correctly')
+    except RuntimeError as e:
+        print('   qBittorrent WARN:  WebUI reachable but API/login failed')
+        print(f'      Details       :  {e}')
+        print('      Fix           :  Check QBITTORRENT_USER / QBITTORRENT_PASS and WebUI settings')
+    except Exception as e:
+        print('   qBittorrent WARN:  Health check failed unexpectedly')
+        print(f'      Details       :  {e}')
+
 @app.route('/api/torrent/add', methods=['POST'])
 def api_torrent_add():
     data = request.get_json()
@@ -1802,4 +1819,6 @@ if __name__ == '__main__':
     print('\n🚀 TOXIBH FLASK SERVER (SQLite / Termux Cloudflare Deploy)')
     print('   Portfolio  :  http://localhost:8080')
     print('   Admin      :  http://localhost:8080/admin\n')
+    _print_qbt_startup_healthcheck()
+    print('')
     app.run(host='0.0.0.0', port=8080, debug=False)
