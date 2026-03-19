@@ -392,24 +392,28 @@ async function loadActiveTorrents() {
   try {
     const r = await fetch('/api/torrent/list');
     const d = await r.json();
-    const all = [...(d.active||[]), ...(d.waiting||[])];
+    if (d.error) throw new Error(d.error);
+    const all = [...(d.active||[]), ...(d.waiting||[]), ...(d.stopped||[])];
     const list = document.getElementById('active-list');
     const area = document.getElementById('active-area');
     if (!all.length) { area.style.display = 'none'; return; }
     area.style.display = 'block';
     list.innerHTML = all.map(t => {
       const name = t.bittorrent?.info?.name || (t.files?.[0]?.path?.split('/').pop()) || t.gid;
-      const pct = t.totalLength > 0 ? Math.round(parseInt(t.completedLength)/parseInt(t.totalLength)*100) : 0;
+      const total = parseInt(t.totalLength || 0);
+      const done = parseInt(t.completedLength || 0);
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
       const spd = fmtSpd(parseInt(t.downloadSpeed||0));
+      const status = (t.status || '').toUpperCase();
       return `<div class="aitem">
         <span class="aitem-name" title="${name}">${name}</span>
         <span class="aitem-prog">${pct}%</span>
-        <span class="aitem-spd">⬇ ${spd}</span>
+        <span class="aitem-spd">${status ? status + ' • ' : ''}⬇ ${spd}</span>
         <button class="abtn play" onclick="resumeTorrent('${t.gid}')">▶ PLAY</button>
         <button class="abtn" onclick="removeGid('${t.gid}')">✕</button>
       </div>`;
     }).join('');
-  } catch(e) {}
+  } catch(e) { console.warn('Failed to load torrents', e); }
 }
 
 // ── ADD TORRENT ──

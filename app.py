@@ -1168,15 +1168,35 @@ def api_torrent_list():
     try:
         all_items = qbt_call('GET', '/api/v2/torrents/info').json() or []
 
-        active_states = {'downloading', 'forcedDL', 'metaDL', 'checkingDL', 'stalledDL'}
+        active_states = {'downloading', 'forcedDL', 'metaDL', 'checkingDL', 'stalledDL', 'uploading', 'forcedUP', 'stalledUP'}
         waiting_states = {'queuedDL', 'queuedUP', 'checkingResumeData', 'moving'}
 
         active, waiting, stopped = [], [], []
         for item in all_items:
+            raw_state = item.get('state', '')
+            mapped_status = {
+                'downloading': 'active',
+                'forcedDL': 'active',
+                'metaDL': 'active',
+                'checkingDL': 'active',
+                'stalledDL': 'active',
+                'uploading': 'active',
+                'forcedUP': 'active',
+                'stalledUP': 'active',
+                'queuedDL': 'waiting',
+                'queuedUP': 'waiting',
+                'checkingResumeData': 'waiting',
+                'moving': 'waiting',
+                'pausedDL': 'paused',
+                'pausedUP': 'paused',
+                'error': 'error',
+                'missingFiles': 'error',
+            }.get(raw_state, 'complete' if int(item.get('completion_on', 0) or 0) > 0 else raw_state)
+
             mapped = {
                 'gid': item.get('hash'),
                 'hash': item.get('hash'),
-                'status': item.get('state', ''),
+                'status': mapped_status,
                 'totalLength': str(int(item.get('total_size', 0) or 0)),
                 'completedLength': str(int((item.get('total_size', 0) or 0) * float(item.get('progress', 0) or 0))),
                 'downloadSpeed': str(int(item.get('dlspeed', 0) or 0)),
@@ -1185,7 +1205,7 @@ def api_torrent_list():
                 'files': [{'path': item.get('content_path', '')}],
             }
 
-            state = item.get('state', '')
+            state = raw_state
             if state in active_states:
                 active.append(mapped)
             elif state in waiting_states:
