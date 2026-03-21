@@ -1197,3 +1197,137 @@ body.cinematic-idle-active #watch-detail-shell {
   opacity: 0.7;
   line-height: 1.2;
 }
+
+/* ── TV MODE (Flix Only) ───────────────────────────────────── */
+body.tv-mode #main-content,
+body.tv-mode #tv-selector-section,
+body.tv-mode #player-section,
+body.tv-mode #recommendations,
+body.tv-mode .cp-section,
+body.tv-mode #search-section,
+body.tv-mode #browse-section .row-section {
+  padding-left: 5vw !important;
+  padding-right: 5vw !important;
+}
+
+body.tv-mode .hero-content,
+body.tv-mode .watch-hero-content {
+  left: 5vw !important;
+  bottom: 8vh !important;
+  width: calc(100vw - 10vw) !important;
+  max-width: 1000px !important;
+}
+
+body.tv-mode .hero-content-anchor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+body.tv-mode .hero-title {
+  order: 1;
+}
+
+body.tv-mode .hero-actions {
+  order: 2;
+}
+
+body.tv-mode .hero-meta {
+  order: 3;
+}
+
+body.tv-mode .hero-desc {
+  order: 4;
+}
+
+body.tv-mode .hero-title,
+body.tv-mode .watch-title {
+  font-size: clamp(48px, 5vw, 64px) !important;
+  line-height: 1.05 !important;
+}
+
+body.tv-mode .hero-desc,
+body.tv-mode .watch-overview,
+body.tv-mode .ep-desc {
+  font-size: 24px !important;
+  line-height: 1.45 !important;
+}
+
+body.tv-mode .hero-meta,
+body.tv-mode .watch-meta-row,
+body.tv-mode .row-title,
+body.tv-mode .cp-section-title,
+body.tv-mode .ep-list-title,
+body.tv-mode .genre-tag {
+  font-size: 1.2rem !important;
+}
+
+body.tv-mode .btn-play,
+body.tv-mode .watch-btn-solid {
+  min-height: 72px !important;
+  padding: 0 34px !important;
+  font-size: 1rem !important;
+  letter-spacing: 0.14em !important;
+}
+
+body.tv-mode .btn-info,
+body.tv-mode .watch-btn-glass,
+body.tv-mode .back-btn,
+body.tv-mode .resume-btn,
+body.tv-mode .all-media-load-btn {
+  min-height: 64px;
+  font-size: 0.95rem !important;
+}
+
+body.tv-mode {
+  --card-w: clamp(250px, 17.5vw, 340px);
+  --card-h: calc(var(--card-w) * 1.5);
+}
+
+body.tv-mode .poster-row {
+  gap: 18px;
+}
+
+body.tv-mode .poster-card {
+  max-width: 340px;
+}
+
+body.tv-mode .poster-card:focus,
+body.tv-mode .poster-card.focused,
+body.tv-mode .episode-card:focus,
+body.tv-mode .episode-card.focused,
+body.tv-mode button:focus,
+body.tv-mode button.focused,
+body.tv-mode a:focus,
+body.tv-mode a.focused,
+body.tv-mode .genre-pill:focus,
+body.tv-mode .genre-pill.focused,
+body.tv-mode .all-media-load-btn:focus,
+body.tv-mode .all-media-load-btn.focused {
+  transform: scale(1.1) !important;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.8) !important;
+  border: 3px solid #00ffff !important;
+  z-index: 50 !important;
+  position: relative;
+  outline: none;
+}
+
+body.tv-mode .hero-audio-btn,
+body.tv-mode .watch-hero-audio-btn,
+body.tv-mode .btn-info,
+body.tv-mode .watch-btn-glass,
+body.tv-mode #toast,
+body.tv-mode #sidebar,
+body.tv-mode #sidebar-overlay,
+body.tv-mode .actor-card,
+body.tv-mode .watch-badge-left,
+body.tv-mode .watch-badge-right,
+body.tv-mode .genre-tag,
+body.tv-mode .rating-badge,
+body.tv-mode .search-overlay-modal,
+body.tv-mode .search-overlay-item,
+body.tv-mode .video-playback-close,
+body.tv-mode .video-playback-next {
+  backdrop-filter: none !important;
+  background: rgba(0, 0, 0, 0.85) !important;
+}

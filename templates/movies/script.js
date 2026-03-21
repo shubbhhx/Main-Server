@@ -13,6 +13,27 @@ const TMDB_WORKER_PROXY = 'https://snowy-bush-2e58.subhamj422.workers.dev/';
 const FALLBACK_POSTER = '/static/img/no-poster.png';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+const _CURRENT_URL = `${window.location.hostname}${window.location.pathname}${window.location.search}`.toLowerCase();
+const isFlixRoute = window.location.pathname.startsWith('/movies') || _CURRENT_URL.includes('/flix') || _CURRENT_URL.includes('flix');
+const isTVBrowser = /(smart-tv|smarttv|hbbtv|appletv|googletv|netcast|viera|webos|tizen|roku|bravia|xbox|playstation|aftb|aftt|afts|crkey|tv)/i.test(navigator.userAgent || '');
+const isTVMode = isFlixRoute && (_CURRENT_URL.includes('flix') || isTVBrowser);
+
+window.isTVMode = isTVMode;
+
+if (isFlixRoute) {
+  const applyTVModeClass = () => {
+    if (document.body) {
+      document.body.classList.toggle('tv-mode', isTVMode);
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyTVModeClass, { once: true });
+  } else {
+    applyTVModeClass();
+  }
+}
+
 let _themeReady = false;
 let _themeLoaderCount = 0;
 let _particleStarted = false;
@@ -720,6 +741,198 @@ function showToast(msg, duration = 3000) {
 }
 
 let _cinematicIdleCleanup = null;
+let _tvFocusCleanup = null;
+
+function initTVSpatialNavigation() {
+  if (!isTVMode || !isFlixRoute) return;
+
+  if (_tvFocusCleanup) {
+    _tvFocusCleanup();
+    _tvFocusCleanup = null;
+  }
+
+  const focusSelector = [
+    '.poster-card',
+    '.episode-card',
+    '.btn-play',
+    '.btn-info',
+    '.watch-btn-solid',
+    '.watch-btn-glass',
+    '.resume-btn',
+    '.all-media-load-btn',
+    '.genre-pill',
+    '.search-overlay-item',
+    '.sidebar-link',
+    '.sidebar-toggle',
+    '.back-btn',
+    'button',
+    'a'
+  ].join(',');
+
+  const isNaturallyFocusable = (el) => {
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'button' || tag === 'a' || tag === 'input' || tag === 'select' || tag === 'textarea') return true;
+    return el.hasAttribute('tabindex');
+  };
+
+  const isVisible = (el) => {
+    if (!el || !el.isConnected) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') === 0) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+
+  const getFocusableElements = () => {
+    const nodes = Array.from(document.querySelectorAll(focusSelector)).filter(isVisible);
+    return nodes.filter((el) => {
+      if (el.disabled) return false;
+      if (!isNaturallyFocusable(el)) el.setAttribute('tabindex', '0');
+      return true;
+    });
+  };
+
+  let active = null;
+
+  const setFocused = (el, options = { scroll: true }) => {
+    if (!el || !isVisible(el)) return;
+    if (active && active !== el) active.classList.remove('focused');
+    active = el;
+    active.classList.add('focused');
+    if (document.activeElement !== active) active.focus({ preventScroll: true });
+    if (options.scroll) {
+      active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+  };
+
+  const firstPreferredFocus = () => {
+    const preferred = [
+      '#watch-btn',
+      '#hero-watch',
+      '.btn-play',
+      '.poster-card',
+      '.episode-card',
+      '.watch-btn-solid',
+      '.watch-btn-glass',
+      '.back-btn'
+    ];
+
+    for (const sel of preferred) {
+      const candidate = document.querySelector(sel);
+      if (candidate && isVisible(candidate)) return candidate;
+    }
+
+    const all = getFocusableElements();
+    return all[0] || null;
+  };
+
+  const chooseByDirection = (origin, direction, candidates) => {
+    if (!origin) return candidates[0] || null;
+    const o = origin.getBoundingClientRect();
+    const ocx = o.left + (o.width / 2);
+    const ocy = o.top + (o.height / 2);
+    const dir = direction.toLowerCase();
+
+    let best = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    candidates.forEach((candidate) => {
+      if (candidate === origin) return;
+      const r = candidate.getBoundingClientRect();
+      const cx = r.left + (r.width / 2);
+      const cy = r.top + (r.height / 2);
+      const dx = cx - ocx;
+      const dy = cy - ocy;
+
+      if (dir === 'left' && dx >= -2) return;
+      if (dir === 'right' && dx <= 2) return;
+      if (dir === 'up' && dy >= -2) return;
+      if (dir === 'down' && dy <= 2) return;
+
+      const primary = (dir === 'left' || dir === 'right') ? Math.abs(dx) : Math.abs(dy);
+      const cross = (dir === 'left' || dir === 'right') ? Math.abs(dy) : Math.abs(dx);
+      const score = primary * 1000 + cross;
+
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    });
+
+    return best;
+  };
+
+  const resetIdle = () => {
+    if (typeof window.__resetCinematicIdleTimer === 'function') {
+      window.__resetCinematicIdleTimer();
+    }
+  };
+
+  const onKeyDown = (event) => {
+    if (!isTVMode || !isFlixRoute) return;
+    const key = event.key;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(key)) return;
+
+    resetIdle();
+
+    const all = getFocusableElements();
+    if (!all.length) return;
+
+    if (!active || !isVisible(active)) {
+      setFocused(firstPreferredFocus() || all[0]);
+    }
+
+    if (key === 'Enter') {
+      event.preventDefault();
+      const target = active || document.activeElement;
+      if (target && typeof target.click === 'function') target.click();
+      return;
+    }
+
+    event.preventDefault();
+    const direction = key.replace('Arrow', '').toLowerCase();
+    const next = chooseByDirection(active, direction, all);
+    if (next) setFocused(next);
+  };
+
+  const onFocusIn = (event) => {
+    const el = event.target?.closest?.(focusSelector);
+    if (el && isVisible(el)) setFocused(el, { scroll: false });
+  };
+
+  const onPointerOver = (event) => {
+    const el = event.target?.closest?.(focusSelector);
+    if (el && isVisible(el)) setFocused(el, { scroll: false });
+  };
+
+  const observer = new MutationObserver(() => {
+    if (!active || !active.isConnected || !isVisible(active)) {
+      const replacement = firstPreferredFocus();
+      if (replacement) setFocused(replacement, { scroll: false });
+    }
+  });
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('focusin', onFocusIn);
+  window.addEventListener('mouseover', onPointerOver);
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  const initial = firstPreferredFocus();
+  if (initial) setFocused(initial, { scroll: false });
+
+  _tvFocusCleanup = () => {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('focusin', onFocusIn);
+    window.removeEventListener('mouseover', onPointerOver);
+    observer.disconnect();
+    if (active) active.classList.remove('focused');
+  };
+}
+
+function initTVModeEnhancements() {
+  if (!isTVMode || !isFlixRoute) return;
+  initTVSpatialNavigation();
+}
 
 function initCinematicIdleMode() {
   if (_cinematicIdleCleanup) {
@@ -743,12 +956,16 @@ function initCinematicIdleMode() {
   });
 
   setActive();
+  window.__resetCinematicIdleTimer = setActive;
 
   _cinematicIdleCleanup = () => {
     if (idleTimer) clearTimeout(idleTimer);
     events.forEach(eventName => {
       window.removeEventListener(eventName, setActive, { passive: true });
     });
+    if (window.__resetCinematicIdleTimer === setActive) {
+      window.__resetCinematicIdleTimer = null;
+    }
     document.body.classList.remove('cinematic-idle-active');
   };
 }
@@ -1405,6 +1622,7 @@ async function initIndexPage() {
 
   bindGlobalSearchOverlay();
   initCinematicIdleMode();
+  initTVModeEnhancements();
 }
 
 function setHero(movie) {
@@ -1470,6 +1688,7 @@ async function initWatchPage() {
   await resolveActiveProfile();
   bindGlobalSearchOverlay();
   initCinematicIdleMode();
+  initTVModeEnhancements();
   const params = new URLSearchParams(window.location.search);
   const movieId = params.get('id');
 
@@ -1941,6 +2160,7 @@ async function initTVPage() {
   await resolveActiveProfile();
   bindGlobalSearchOverlay();
   initCinematicIdleMode();
+  initTVModeEnhancements();
   showThemeLoader('FETCHING TV SHOWS', 'SYNCING STREAM CATALOG');
   initRowIntersectionObserver();
   // Scroll header behaviour
@@ -2044,6 +2264,7 @@ async function initWatchTVPage() {
   await resolveActiveProfile();
   bindGlobalSearchOverlay();
   initCinematicIdleMode();
+  initTVModeEnhancements();
   const params = new URLSearchParams(window.location.search);
   const showId = params.get('id');
 
