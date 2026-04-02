@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ToxibhFlix - Watch History</title>
+<meta name="description" content="Full Netflix-style watch history for the active profile.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%95%98%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/movies/theme.css">
+<link rel="stylesheet" href="/movies/style.css">
+<style>
+  #history-main {
+    padding: 110px 0 70px;
+  }
+  .history-wrap {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0 48px;
+  }
+  .history-head {
+    margin-bottom: 22px;
+  }
+  .history-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.08rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--nf-text);
+    margin-bottom: 10px;
+  }
+  .history-sub {
+    color: var(--nf-muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .history-tools {
+    margin: 18px 0 18px;
+    display: grid;
+    grid-template-columns: 1fr 170px;
+    gap: 10px;
+  }
+  .history-input,
+  .history-select {
+    min-height: 42px;
+    border: 1px solid rgba(0,245,255,0.25);
+    border-radius: 10px;
+    background: rgba(10,10,15,0.7);
+    color: var(--nf-text);
+    padding: 0 12px;
+    outline: none;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+  }
+  .history-input:focus,
+  .history-select:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 10px rgba(0,245,255,0.25);
+  }
+  .history-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .history-card {
+    position: relative;
+    border: 1px solid rgba(0,245,255,0.16);
+    background: rgba(10,10,15,0.72);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .history-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(0,245,255,0.55);
+    box-shadow: 0 0 14px rgba(0,245,255,0.2);
+  }
+  .history-poster {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    display: block;
+    background: #0d0d12;
+  }
+  .history-meta {
+    padding: 10px;
+  }
+  .history-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.62rem;
+    color: var(--nf-text);
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .history-subline {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.56rem;
+    color: var(--nf-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .history-when {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.56rem;
+    color: rgba(0,245,255,0.8);
+    letter-spacing: 0.05em;
+  }
+  .history-progress {
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    margin-top: 7px;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .history-progress > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #00f5ff, #ff006e);
+    box-shadow: 0 0 8px rgba(0,245,255,0.9);
+  }
+  .history-empty {
+    padding: 20px 4px;
+    color: var(--nf-muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+  }
+  .history-load {
+    margin-top: 14px;
+    display: flex;
+    justify-content: center;
+  }
+  .history-load-btn {
+    min-height: 40px;
+    border: 1px solid rgba(0,245,255,0.28);
+    border-radius: 999px;
+    padding: 0 16px;
+    background: rgba(10,10,15,0.75);
+    color: var(--nf-text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .history-load-btn:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    box-shadow: 0 0 12px rgba(0,245,255,0.2);
+  }
+  @media (max-width: 1180px) {
+    .history-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 900px) {
+    .history-wrap { padding: 0 16px; }
+    .history-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .history-tools { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header id="site-header">
+  <div class="header-left">
+    <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
+    <nav class="header-nav">
+      <a href="/movies/browse">Movies</a>
+      <a href="/movies/tvshows">TV Shows</a>
+      <a href="/profile">Profile</a>
+      <a href="/movies/history" class="active">History</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <a href="/profile" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Profile</span></a>
+    <a href="/movies" class="back-btn">← Switch Profile</a>
+    <a href="/" class="back-btn">← Portfolio</a>
+  </div>
+</header>
+
+<main id="history-main">
+  <div class="history-wrap">
+    <div class="history-head">
+      <div class="history-title">Watch History</div>
+      <div class="history-sub" id="history-sub">Loading active profile...</div>
+    </div>
+
+    <div class="history-tools">
+      <input id="history-search" class="history-input" type="search" placeholder="Search by TMDB ID or title" autocomplete="off" spellcheck="false">
+      <select id="history-filter" class="history-select" aria-label="Filter media type">
+        <option value="all">All</option>
+        <option value="movie">Movies</option>
+        <option value="tv">TV Shows</option>
+      </select>
+    </div>
+
+    <div id="history-grid" class="history-grid"></div>
+    <div id="history-empty" class="history-empty" style="display:none;">No watch history found for this profile yet.</div>
+    <div class="history-load" id="history-load-wrap" style="display:none;">
+      <button type="button" class="history-load-btn" id="history-load-btn">Load More</button>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+<script>
+  const FALLBACK_POSTER = '/static/no-poster.png';
+  const PAGE_SIZE = 40;
+
+  const state = {
+    profile: null,
+    raw: [],
+    filtered: [],
+    visible: PAGE_SIZE
+  };
+
+  function getActiveProfile() {
+    return window.__activeProfile || null;
+  }
+
+  function profileHeaders() {
+    const p = getActiveProfile();
+    const h = {};
+    if (p && p.id) h['X-Profile-Id'] = p.id;
+    return h;
+  }
+
+  function normalizePosterValue(value) {
+    if (!value) return FALLBACK_POSTER;
+    if (value.startsWith('/tmdb_image') || value.startsWith('/static/')) return value;
+    if (value.startsWith('/')) {
+      const abs = `https://image.tmdb.org/t/p/w342${value}`;
+      return `/tmdb_image?url=${encodeURIComponent(abs)}`;
+    }
+    return value;
+  }
+
+  async function fetchProfile() {
+    const p = getActiveProfile();
+    const q = new URLSearchParams();
+    if (p?.id) q.set('profile_id', p.id);
+    if (p?.name) q.set('profile_name', p.name);
+    const url = q.toString() ? `/api/profile/active?${q.toString()}` : '/api/profile/active';
+    const res = await fetch(url, { headers: profileHeaders() });
+    if (!res.ok) return p;
+    const data = await res.json();
+    const profile = data.profile || p;
+    if (profile) {
+      const normalized = {
+        id: profile.id,
+        name: profile.name,
+        avatarUrl: profile.avatar_url || profile.avatar || '/static/default-avatar.png'
+      };
+      window.__activeProfile = normalized;
+      return normalized;
+    }
+    return p;
+  }
+
+  function formatRelative(iso) {
+    if (!iso) return 'Unknown time';
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return 'Unknown time';
+    const diff = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  }
+
+  function applyFilters() {
+    const q = (document.getElementById('history-search')?.value || '').trim().toLowerCase();
+    const f = (document.getElementById('history-filter')?.value || 'all').toLowerCase();
+
+    state.filtered = state.raw.filter(item => {
+      const media = String(item.media_type || '').toLowerCase();
+      if (f !== 'all' && media !== f) return false;
+      if (!q) return true;
+      const tmdbId = String(item.tmdb_id || '').toLowerCase();
+      const title = String(item.title || item.tmdb_id || '').toLowerCase();
+      return tmdbId.includes(q) || title.includes(q);
+    });
+    state.visible = PAGE_SIZE;
+    render();
+  }
+
+  function render() {
+    const grid = document.getElementById('history-grid');
+    const empty = document.getElementById('history-empty');
+    const loadWrap = document.getElementById('history-load-wrap');
+    if (!grid || !empty || !loadWrap) return;
+
+    const view = state.filtered.slice(0, state.visible);
+    grid.innerHTML = '';
+
+    if (!view.length) {
+      empty.style.display = 'block';
+      loadWrap.style.display = 'none';
+      return;
+    }
+
+    empty.style.display = 'none';
+    view.forEach(item => {
+      const card = document.createElement('article');
+      card.className = 'history-card';
+
+      const tmdbId = item.tmdb_id;
+      const mediaType = String(item.media_type || 'movie').toLowerCase();
+      const season = item.season || 1;
+      const episode = item.episode || 1;
+      const progress = Math.max(0, Number(item.progress_seconds || 0));
+      const duration = Math.max(0, Number(item.duration_seconds || 0));
+      const pct = duration > 0 ? Math.max(0, Math.min(100, Math.round((progress / duration) * 100))) : 0;
+      const subtitle = mediaType === 'tv' ? `TV · S${season}E${episode}` : 'Movie';
+      const watchUrl = mediaType === 'tv'
+        ? `/movies/watch-tv?id=${encodeURIComponent(tmdbId)}&s=${encodeURIComponent(season)}&e=${encodeURIComponent(episode)}&resume=1`
+        : `/movies/watch.html?id=${encodeURIComponent(tmdbId)}`;
+      const displayTitle = item.title || `TMDB ${tmdbId}`;
+
+      card.innerHTML = `
+        <img class="history-poster" src="${normalizePosterValue(item.poster || '')}" alt="${tmdbId}" loading="lazy" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">
+        <div class="history-meta">
+          <div class="history-name">${displayTitle}</div>
+          <div class="history-subline">${subtitle}</div>
+          <div class="history-when">${formatRelative(item.watched_at)}</div>
+          <div class="history-progress"><span style="width:${pct}%"></span></div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        window.location.href = watchUrl;
+      });
+
+      grid.appendChild(card);
+    });
+
+    loadWrap.style.display = state.filtered.length > state.visible ? 'flex' : 'none';
+  }
+
+  async function loadHistory() {
+    const p = await fetchProfile();
+    if (!p || !p.id) {
+      window.location.href = '/movies';
+      return;
+    }
+
+    state.profile = p;
+    const profileName = document.getElementById('profile-name-display');
+    const sub = document.getElementById('history-sub');
+    if (profileName) profileName.textContent = p.name || 'Profile';
+    if (sub) sub.textContent = `Full timeline for ${p.name || 'Profile'} · newest first`;
+
+    const res = await fetch(`/api/watch-history/${encodeURIComponent(p.id)}`, { headers: profileHeaders() });
+    if (!res.ok) {
+      state.raw = [];
+      applyFilters();
+      return;
+    }
+
+    const data = await res.json();
+    state.raw = (data.items || []).map(item => ({
+      ...item,
+      media_type: item.media_type || 'movie',
+      progress_seconds: Number(item.progress_seconds || 0),
+      duration_seconds: Number(item.duration_seconds || 0)
+    }));
+
+    applyFilters();
+  }
+
+  document.getElementById('history-search')?.addEventListener('input', applyFilters);
+  document.getElementById('history-filter')?.addEventListener('change', applyFilters);
+  document.getElementById('history-load-btn')?.addEventListener('click', () => {
+    state.visible += PAGE_SIZE;
+    render();
+  });
+
+  loadHistory().catch(() => {
+    state.raw = [];
+    applyFilters();
+  });
+</script>
+</body>
+</html>

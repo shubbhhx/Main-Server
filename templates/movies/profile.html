@@ -206,6 +206,7 @@
       <a href="/movies/browse">Movies</a>
       <a href="/movies/tvshows">TV Shows</a>
       <a href="/profile" class="active">Profile</a>
+      <a href="/movies/history">History</a>
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:14px;">
@@ -253,20 +254,16 @@
 <div id="toast"></div>
 <script src="/movies/script.js?v=5"></script>
 <script>
-  const DASH_TMDB_API_BASE = 'https://api.themoviedb.org/3';
-  const DASH_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4';
-  const DASH_WORKER = 'https://snowy-bush-2e58.subhamj422.workers.dev/';
-  const DASH_FALLBACK_POSTER = '/static/img/no-poster.png';
+  const DASH_FALLBACK_POSTER = '/static/no-poster.png';
 
   function _dashActiveProfile() {
-    return JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    return window.__activeProfile || null;
   }
   function _dashProfileQuery() {
     const p = _dashActiveProfile();
     if (!p) return '';
     const q = new URLSearchParams();
     if (p.id) q.set('profile_id', p.id);
-    if (p.name) q.set('profile_name', p.name);
     return q.toString();
   }
   function _dashHeaders() {
@@ -283,6 +280,15 @@
       return `/tmdb_image?url=${encodeURIComponent(abs)}`;
     }
     return poster;
+  }
+
+  function _dashAvatar(avatarUrl) {
+    const raw = String(avatarUrl || '').trim();
+    if (!raw) return '/static/default-avatar.png';
+    if (raw.startsWith('/static/profile_photos/')) {
+      return `${raw}${raw.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    }
+    return raw;
   }
 
   async function fetchLocalContinue() {
@@ -315,20 +321,22 @@
     wishlistItems.slice(0, 8).forEach(i => pushSeed(i.content_id, i.content_type));
 
     if (!seeds.length) {
-      const originalApiUrl = `${DASH_TMDB_API_BASE}/trending/all/week?${new URLSearchParams({ api_key: DASH_TMDB_KEY, language: 'en-US' }).toString()}`;
-      const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalApiUrl);
-      const res = await fetch(fetchUrl);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (data.results || []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 18);
+      const [movieRes, tvRes] = await Promise.all([
+        fetch('/api/tmdb/trending'),
+        fetch('/api/tmdb/trending/tv')
+      ]);
+      const movieData = movieRes.ok ? await movieRes.json() : { results: [] };
+      const tvData = tvRes.ok ? await tvRes.json() : { results: [] };
+      const movieItems = (movieData.results || []).map(item => ({ ...item, media_type: 'movie' }));
+      const tvItems = (tvData.results || []).map(item => ({ ...item, media_type: 'tv' }));
+      return [...movieItems, ...tvItems].slice(0, 18);
     }
 
     const watchedSet = new Set(seeds.map(s => s.key));
     const merged = [];
 
     for (const seed of seeds.slice(0, 4)) {
-      const endpoint = `${DASH_TMDB_API_BASE}/${seed.type}/${seed.id}/recommendations?${new URLSearchParams({ api_key: DASH_TMDB_KEY, language: 'en-US', page: '1' }).toString()}`;
-      const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(endpoint);
+      const fetchUrl = `/api/tmdb/${seed.type}/${encodeURIComponent(seed.id)}/recommendations`;
       try {
         const res = await fetch(fetchUrl);
         if (!res.ok) continue;
@@ -414,7 +422,7 @@
 
       const p = _dashActiveProfile();
       const name = (p && p.name) ? p.name : 'Guest';
-      const emoji = (p && p.emoji) ? p.emoji : '👤';
+      const avatarUrl = _dashAvatar((p && p.avatarUrl) ? p.avatarUrl : '/static/avatars/avatar1.png');
       const nameEl = document.getElementById('profile-name-display');
       const titleEl = document.getElementById('dash-title');
       const heroNameEl = document.getElementById('dash-hero-name');
@@ -422,16 +430,16 @@
       if (nameEl) nameEl.textContent = name;
       if (titleEl) titleEl.textContent = `${name} Dashboard`;
       if (heroNameEl) heroNameEl.textContent = name;
-      if (avatarEl) avatarEl.textContent = emoji;
+      if (avatarEl) {
+        avatarEl.innerHTML = `<img src="${avatarUrl}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.onerror=null;this.src='/static/default-avatar.png'">`;
+      }
 
       const [resumeItems, wishlistItems] = await Promise.all([
         fetchLocalContinue(),
         fetchLocalWishlist()
       ]);
 
-      const effectiveResumeItems = (resumeItems && resumeItems.length)
-        ? resumeItems
-        : (typeof getContinueWatching === 'function' ? getContinueWatching() : []);
+      const effectiveResumeItems = resumeItems || [];
 
       renderResume(effectiveResumeItems || []);
       renderGrid(wishlistItems || [], 'wishlist-grid');

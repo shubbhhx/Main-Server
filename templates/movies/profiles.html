@@ -134,12 +134,23 @@
 
   .avatar {
     width: 120px; height: 120px;
-    border-radius: 6px;
+    border-radius: 50%;
     border: 2px solid rgba(0,245,255,.18);
     display: flex; align-items: center; justify-content: center;
-    font-size: 3.5rem;
     transition: border-color .3s, box-shadow .3s;
     position: relative; overflow: hidden;
+  }
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+  .profile-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
   }
   .avatar::after {
     content: '';
@@ -156,12 +167,89 @@
 
   .pname {
     font-family: 'Share Tech Mono', monospace;
-    font-size: .78rem;
+    font-size: 1rem;
     letter-spacing: .1em;
     color: rgba(224,247,255,.55);
     text-transform: uppercase;
     transition: color .25s, text-shadow .25s;
   }
+
+  .profile-actions { display: flex; gap: 8px; }
+  .profile-edit-btn {
+    border: 1px solid rgba(0,245,255,.35);
+    background: rgba(0,245,255,.1);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: .08em;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .profile-edit-btn:hover { box-shadow: var(--glow); }
+
+  .profile-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    background: rgba(2,4,8,.82);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .profile-modal.open { display: flex; }
+  .profile-modal-card {
+    width: min(560px, 100%);
+    background: rgba(2,4,8,.98);
+    border: 1px solid rgba(0,245,255,.35);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .profile-modal-title {
+    font-family: 'Orbitron', monospace;
+    margin-bottom: 12px;
+  }
+  .profile-input {
+    width: 100%;
+    background: rgba(0,245,255,.05);
+    color: #e0f7ff;
+    border: 1px solid rgba(0,245,255,.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+  .photo-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .photo-upload-row input[type="file"] {
+    flex: 1;
+    color: rgba(224,247,255,.85);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+  }
+  .avatar-picker {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .avatar-pick {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    overflow: hidden;
+    background: transparent;
+    padding: 0;
+  }
+  .avatar-pick img { width: 100%; display: block; aspect-ratio: 1 / 1; object-fit: cover; }
+  .avatar-pick.active { border-color: var(--cyan); box-shadow: var(--glow); }
+  .profile-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
   /* ── MANAGE BUTTON — portfolio secondary style ── */
   .manage-btn {
@@ -249,6 +337,10 @@
     <!-- Profiles loaded from API or defaults -->
   </div>
 
+  <div style="margin-top:6px">
+    <button type="button" class="manage-btn" onclick="openCreateModal()">+ Add Profile</button>
+  </div>
+
   <div style="margin-top:12px">
     <a href="/profile" class="action-link">👤 Profile Dashboard</a>
   </div>
@@ -265,9 +357,38 @@
 <div id="flash"></div>
 <div id="toast"></div>
 
+<div class="profile-modal" id="profile-modal" role="dialog" aria-modal="true" aria-label="Edit profile">
+  <div class="profile-modal-card">
+    <div class="profile-modal-title" id="profile-modal-title">Edit Profile</div>
+    <input class="profile-input" id="profile-name-input" type="text" maxlength="40" placeholder="Profile name">
+    <div class="photo-upload-row">
+      <input type="file" id="profilePhoto" accept="image/png,image/jpeg,image/webp">
+      <button type="button" class="profile-edit-btn" onclick="uploadProfilePhoto()">Upload</button>
+    </div>
+    <div class="avatar-picker" id="avatar-picker"></div>
+    <div class="profile-modal-actions">
+      <button type="button" class="manage-btn" onclick="closeProfileModal()">Cancel</button>
+      <button type="button" class="continue-btn" onclick="saveProfileModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="/movies/script.js?v=5"></script>
 <script>
+  const DEFAULT_AVATARS = [
+    '/static/default-avatar.png',
+    '/static/avatars/avatar1.png',
+    '/static/avatars/avatar2.png',
+    '/static/avatars/avatar3.png',
+    '/static/avatars/avatar4.png',
+    '/static/avatars/avatar5.png'
+  ];
+
   let loadedProfiles = [];
+  let modalMode = 'create';
+  let editingProfileId = '';
+  let selectedAvatarUrl = DEFAULT_AVATARS[0];
+  let currentSelectedProfileId = '';
 
   // ── INJECT PORTFOLIO BACKGROUND FX ──────────────────────────
   (function() {
@@ -324,6 +445,156 @@
     }
   })();
 
+  function escapeHtml(input) {
+    return String(input || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function getActiveProfileId() {
+    return String(currentSelectedProfileId || '').trim();
+  }
+
+  function normalizeAvatarUrl(rawUrl) {
+    const cleaned = String(rawUrl || '').trim();
+    if (!cleaned) return DEFAULT_AVATARS[0];
+    if (cleaned.startsWith('/static/profile_photos/')) return cleaned;
+    if (DEFAULT_AVATARS.includes(cleaned)) return cleaned;
+    return DEFAULT_AVATARS[0];
+  }
+
+  function withAvatarCacheBust(url) {
+    const normalized = normalizeAvatarUrl(url);
+    if (!normalized.startsWith('/static/profile_photos/')) return normalized;
+    return `${normalized}${normalized.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  }
+
+  function renderAvatarPicker() {
+    const picker = document.getElementById('avatar-picker');
+    if (!picker) return;
+    picker.innerHTML = DEFAULT_AVATARS.map((url) => `
+      <button type="button" class="avatar-pick ${selectedAvatarUrl === url ? 'active' : ''}" data-avatar="${url}">
+        <img src="${url}" alt="Avatar">
+      </button>
+    `).join('');
+    picker.querySelectorAll('.avatar-pick').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedAvatarUrl = btn.getAttribute('data-avatar') || DEFAULT_AVATARS[0];
+        renderAvatarPicker();
+      });
+    });
+  }
+
+  function openCreateModal() {
+    modalMode = 'create';
+    editingProfileId = '';
+    selectedAvatarUrl = DEFAULT_AVATARS[0];
+    const title = document.getElementById('profile-modal-title');
+    const nameInput = document.getElementById('profile-name-input');
+    if (title) title.textContent = 'Create Profile';
+    if (nameInput) nameInput.value = '';
+    const input = document.getElementById('profilePhoto');
+    if (input) input.value = '';
+    renderAvatarPicker();
+    document.getElementById('profile-modal')?.classList.add('open');
+  }
+
+  function openEditModal(profileId) {
+    const p = loadedProfiles.find((x) => String(x.id) === String(profileId));
+    if (!p) return;
+    modalMode = 'edit';
+    editingProfileId = String(p.id || '');
+    selectedAvatarUrl = normalizeAvatarUrl(p.avatar_url);
+    const title = document.getElementById('profile-modal-title');
+    const nameInput = document.getElementById('profile-name-input');
+    if (title) title.textContent = `Edit ${p.name}`;
+    if (nameInput) nameInput.value = p.name || '';
+    const input = document.getElementById('profilePhoto');
+    if (input) input.value = '';
+    renderAvatarPicker();
+    document.getElementById('profile-modal')?.classList.add('open');
+  }
+
+  async function uploadProfilePhoto() {
+    const fileInput = document.getElementById('profilePhoto');
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+    if (!file) {
+      showProfileToast('⚠ Choose a photo first.');
+      return;
+    }
+    if (!editingProfileId) {
+      showProfileToast('⚠ Select an existing profile to upload a photo.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('photo', file);
+    formData.append('profile_id', editingProfileId);
+
+    try {
+      const res = await fetch('/api/upload-profile-photo', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showProfileToast(`⚠ ${data.error || 'Upload failed.'}`);
+        return;
+      }
+      selectedAvatarUrl = normalizeAvatarUrl(data.avatar_url || selectedAvatarUrl);
+
+      const idx = loadedProfiles.findIndex((p) => String(p.id || '') === String(editingProfileId || ''));
+      if (idx >= 0) {
+        loadedProfiles[idx].avatar_url = selectedAvatarUrl;
+      }
+
+      await loadProfiles();
+      renderAvatarPicker();
+      showProfileToast('✓ Photo uploaded');
+    } catch (e) {
+      showProfileToast('⚠ Upload failed.');
+    }
+  }
+
+  function closeProfileModal() {
+    document.getElementById('profile-modal')?.classList.remove('open');
+  }
+
+  async function saveProfileModal() {
+    const nameInput = document.getElementById('profile-name-input');
+    const name = (nameInput?.value || '').trim();
+    if (!name) {
+      showProfileToast('⚠ Profile name is required.');
+      return;
+    }
+
+    const url = modalMode === 'edit' ? '/api/profiles/update' : '/api/profiles/create';
+    const body = modalMode === 'edit'
+      ? { id: editingProfileId, name, avatar_url: normalizeAvatarUrl(selectedAvatarUrl) }
+      : { name, avatar_url: normalizeAvatarUrl(selectedAvatarUrl) };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showProfileToast(`⚠ ${data.error || 'Unable to save profile.'}`);
+        return;
+      }
+      closeProfileModal();
+      await loadProfiles();
+      showProfileToast('✓ Profile saved');
+    } catch (e) {
+      showProfileToast('⚠ Unable to save profile right now.');
+    }
+  }
+
   async function loadProfiles() {
     let profiles = [];
     try {
@@ -337,7 +608,8 @@
     profiles = profiles.map(p => ({
       id: p.id || '',
       name: p.name || p.profile_name || 'Profile',
-      emoji: p.emoji || p.avatar || '👤'
+      avatar_url: normalizeAvatarUrl(p.avatar_url || p.avatar || DEFAULT_AVATARS[0]),
+      is_default: !!p.is_default
     }));
 
     loadedProfiles = profiles;
@@ -345,48 +617,70 @@
 
     const grid = document.getElementById('profiles-grid');
     grid.innerHTML = profiles.map((p) => `
-      <div class="profile-item" onclick="handleSelectProfile('${p.id || ''}','${p.name}','${p.emoji}')">
-        <div class="avatar">${p.emoji}</div>
-        <div class="pname">${p.name}</div>
+      <div class="profile-item" onclick="handleSelectProfile('${p.id || ''}')">
+        <div class="avatar"><img src="${withAvatarCacheBust(p.avatar_url)}" alt="${escapeHtml(p.name)}" onerror="this.onerror=null;this.src='/static/default-avatar.png'"></div>
+        <div class="pname profile-name">${escapeHtml(p.name)}</div>
+        <div class="profile-actions">
+          <button type="button" class="profile-edit-btn" onclick="event.stopPropagation();openEditModal('${p.id || ''}')">Edit</button>
+        </div>
       </div>
-    `).join('') + `
-      <div class="profile-item" onclick="handleGuestLogin()">
-        <div class="avatar">👤</div>
-        <div class="pname">Guest</div>
-      </div>
-    `;
+    `).join('');
+
+    const activeProfile = await resolveActiveProfile();
+    currentSelectedProfileId = (activeProfile && activeProfile.id) ? String(activeProfile.id) : '';
+
+    if (!currentSelectedProfileId && profiles.length) {
+      const defaultProfile = profiles.find(p => !!p.is_default) || profiles.find(p => String(p.name || '').toLowerCase() === 'guest') || profiles[0];
+      currentSelectedProfileId = String(defaultProfile.id || '');
+      await setActiveProfile(currentSelectedProfileId);
+    } else if (currentSelectedProfileId && !profiles.some(p => String(p.id) === currentSelectedProfileId) && profiles.length) {
+      currentSelectedProfileId = String((profiles[0] && profiles[0].id) || '');
+      await setActiveProfile(currentSelectedProfileId);
+    }
+
+    if (profiles.length) {
+      renderActiveProfileStrip();
+    }
   }
 
-  function persistActiveProfile(profileState) {
-    localStorage.setItem('toxibhflix_profile', JSON.stringify(profileState));
-    localStorage.setItem('activeProfile', JSON.stringify(profileState));
+  async function setActiveProfile(profileId) {
+    const pid = String(profileId || '').trim();
+    if (!pid) return null;
+    try {
+      const res = await fetch('/api/profile/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: pid })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.profile) return null;
+      const p = data.profile;
+      const normalized = {
+        id: p.id,
+        name: p.name,
+        avatarUrl: withAvatarCacheBust(p.avatar_url || p.avatar || DEFAULT_AVATARS[0])
+      };
+      window.__activeProfile = normalized;
+      currentSelectedProfileId = String(p.id || '');
+      return normalized;
+    } catch (e) {
+      return null;
+    }
   }
 
-  function handleSelectProfile(id, name, emoji) {
-    const profileState = {
-      id: id || '',
-      name: name || 'Profile',
-      emoji: emoji || '👤',
-      isGuest: false,
-      ts: Date.now()
-    };
-    persistActiveProfile(profileState);
+  async function handleSelectProfile(id) {
+    await setActiveProfile(id || '');
     document.getElementById('flash').classList.add('on');
     setTimeout(() => { window.location.href = '/movies/browse'; }, 450);
   }
 
   function handleGuestLogin() {
-    const guestProfile = {
-      id: 'guest',
-      name: 'Guest',
-      avatar: 'guest-icon',
-      emoji: '👤',
-      isGuest: true,
-      ts: Date.now()
-    };
-    persistActiveProfile(guestProfile);
-    document.getElementById('flash').classList.add('on');
-    setTimeout(() => { window.location.href = '/movies/browse'; }, 450);
+    const guest = loadedProfiles.find(p => String(p.name || '').toLowerCase() === 'guest' || String(p.id || '').toLowerCase() === 'guest');
+    if (guest) {
+      handleSelectProfile(guest.id || 'guest', guest.name || 'Guest', guest.emoji || '👤');
+      return;
+    }
+    showProfileToast('⚠ Guest profile not found.');
   }
 
   function showProfileToast(msg) {
@@ -397,50 +691,38 @@
   }
 
   function continueWithActiveProfile() {
-    const active = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
-    if (!active || !active.name) {
+    const activeId = getActiveProfileId();
+    if (!activeId) {
       showProfileToast('⚠ No active profile found.');
       return;
     }
 
     const match = loadedProfiles.find(p => {
-      return String(p.id || '') === String(active.id || '');
+      return String(p.id || '') === String(activeId || '');
     });
-
-    if (active.isGuest) {
-      handleGuestLogin();
-      return;
-    }
 
     if (!match) {
       showProfileToast('⚠ Previously selected profile is unavailable.');
       return;
     }
 
-    handleSelectProfile(match.id || '', match.name, match.emoji || '👤');
+    handleSelectProfile(match.id || '');
   }
 
   function renderActiveProfileStrip() {
     const strip = document.getElementById('active-profile-strip');
     const activeName = document.getElementById('active-profile-name');
     const continueBtn = document.getElementById('continue-profile-btn');
-    const active = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    const activeId = getActiveProfileId();
 
-    if (!strip || !activeName || !continueBtn || !active || !active.name) {
+    if (!strip || !activeName || !continueBtn || !activeId) {
       if (strip) strip.classList.remove('show');
       return;
     }
 
     const match = loadedProfiles.find(p => {
-      return String(p.id || '') === String(active.id || '');
+      return String(p.id || '') === String(activeId || '');
     });
-
-    if (active.isGuest) {
-      activeName.textContent = 'Guest';
-      strip.classList.add('show');
-      setTimeout(() => continueBtn.focus(), 0);
-      return;
-    }
 
     if (!match) {
       strip.classList.remove('show');

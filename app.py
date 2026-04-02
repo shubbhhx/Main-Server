@@ -5,7 +5,7 @@
 
 import os, uuid, bcrypt, mimetypes, json, time, re, logging
 import urllib.request, urllib.error
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, quote
 import requests as req_session   # for Vidking proxy (streaming)
 from datetime import datetime, timedelta
 from functools import wraps
@@ -19,16 +19,38 @@ from flask_limiter.util import get_remote_address
 from flask_session import Session
 import psutil
 import db
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+
+class ForceHTTPSMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        environ['wsgi.url_scheme'] = 'https'
+        environ['HTTPS'] = 'on'
+        return self.app(environ, start_response)
 
 # ── APP SETUP ────────────────────────────────────────────
-app = Flask(__name__, static_folder='static', template_folder='templates')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(
+    __name__,
+    static_folder=os.path.join(BASE_DIR, 'static'),
+    static_url_path='/static',
+    template_folder=os.path.join(BASE_DIR, 'templates')
+)
+
+# Trust Cloudflare forwarded headers so Flask sees the original HTTPS request.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app.wsgi_app = ForceHTTPSMiddleware(app.wsgi_app)
 
 # Termux/Android Session Optimizations
 app.config['SECRET_KEY'] = 'toxibh_flask_secret_xR9pQz2026'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['PREFERRED_URL_SCHEME'] = 'https'
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 
 limiter = Limiter(get_remote_address, app=app, default_limits=["500 per hour"])
@@ -43,10 +65,11 @@ DB_DIR      = os.path.join(DATA_ROOT, 'databases')
 VAULT_DIR   = os.path.join(DATA_ROOT, 'vault')
 PHOTOS_DIR  = os.path.join(VAULT_DIR, 'photos')
 PDFS_DIR    = os.path.join(VAULT_DIR, 'pdfs')
+PROFILE_PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'profile_photos')
 LOGS_DIR    = os.path.join(DATA_ROOT, 'logs')
 SERVER_LOG  = os.path.join(LOGS_DIR, 'server.log')
 
-for d in [DB_DIR, PHOTOS_DIR, PDFS_DIR, LOGS_DIR]:
+for d in [DB_DIR, PHOTOS_DIR, PDFS_DIR, PROFILE_PHOTOS_DIR, LOGS_DIR]:
     os.makedirs(d, exist_ok=True)
 
 logger = logging.getLogger('toxibh-control-center')
@@ -121,24 +144,56 @@ _cleanup_thread.start()
 SECRET_KEY   = 'toxibh-shubh@6969'
 ALLOWED_IMG  = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
 ALLOWED_PDF  = {'application/pdf'}
-DEFAULT_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4'
-TMDB_PROXY_WORKER_URL = 'https://snowy-bush-2e58.subhamj422.workers.dev/'
+WORKER_URL = (os.environ.get('TMDB_METADATA_WORKER_URL') or 'https://snowy-bush-2e58.subhamj422.workers.dev').rstrip('/')
+
+STREAM_SERVER_PRIORITY = [
+    'vidfast',
+    'vidking',
+    'vidsrc',
+    'vidsrc2',
+    'embed_su',
+    'autoembed',
+    'superembed',
+    '2embed',
+    'multiembed',
+    'smashystream',
+    'vidsrc_to',
+    'vidsrc_cc',
+    'vidsrc_me',
+]
+
+STREAM_SERVER_LABELS = {
+    'vidfast': 'VidFast',
+    'vidking': 'VidKing',
+    'vidsrc': 'VidSrc',
+    'vidsrc2': 'VidSrc2',
+    'embed_su': 'Embed.su',
+    'autoembed': 'AutoEmbed',
+    'superembed': 'SuperEmbed',
+    '2embed': '2Embed',
+    'multiembed': 'MultiEmbed',
+    'smashystream': 'SmashyStream',
+    'vidsrc_to': 'VidSrc.to',
+    'vidsrc_cc': 'VidSrc.cc',
+    'vidsrc_me': 'VidSrc.me',
+}
+
+DEFAULT_AVATAR_URLS = [
+    '/static/default-avatar.png',
+    '/static/avatars/avatar1.png',
+    '/static/avatars/avatar2.png',
+    '/static/avatars/avatar3.png',
+    '/static/avatars/avatar4.png',
+    '/static/avatars/avatar5.png',
+]
+
+ALLOWED_PROFILE_PHOTO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+ALLOWED_PROFILE_PHOTO_MIME_TYPES = {'image/png', 'image/jpeg', 'image/webp'}
+MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 
 def log_admin_action(action, detail=''):
     actor = session.get('admin') and 'admin' or 'guest'
     logger.info(f'ADMIN_ACTION | actor={actor} | action={action} | detail={detail}')
-
-def _get_tmdb_key():
-    saved = (db.get_setting('tmdb_key') or '').strip()
-    if saved:
-        return saved
-    return DEFAULT_TMDB_KEY
-
-def _set_tmdb_key(key):
-    value = (key or '').strip()
-    if value:
-        return db.set_setting('tmdb_key', value)
-    return False
 
 # ── AUTH DECORATOR ────────────────────────────────────────
 def admin_required(f):
@@ -284,6 +339,10 @@ def movies_watch_tv():
 def profile_dashboard_page():
     return send_from_directory('templates/movies', 'profile.html')
 
+@app.route('/movies/history')
+def movies_history_page():
+    return send_from_directory('templates/movies', 'history.html')
+
 @app.route('/movies/torrent')
 def movies_torrent():
     return send_from_directory('templates/movies', 'torrent.html')
@@ -301,39 +360,87 @@ def root_js_static(filename):
 def _normalize_profile(profile_row):
     if not profile_row:
         return None
+    avatar_url = (profile_row.get('avatar_url') or profile_row.get('avatar') or DEFAULT_AVATAR_URLS[0]).strip()
     return {
         'id': profile_row.get('id'),
         'name': profile_row.get('profile_name'),
-        'emoji': profile_row.get('avatar') or '👤',
+        'avatar_url': avatar_url,
+        'avatar': avatar_url,
+        'emoji': avatar_url,
+        'is_default': bool(profile_row.get('is_default')),
         'created_at': profile_row.get('created_at')
     }
 
-def _resolve_profile(profile_id=None, profile_name=None, avatar='👤'):
-    pid = (profile_id or '').strip()
+
+def _sanitize_avatar_url(raw_avatar):
+    avatar_url = (raw_avatar or '').strip()
+    if avatar_url.startswith('/static/profile_photos/'):
+        return avatar_url
+    if avatar_url in DEFAULT_AVATAR_URLS:
+        return avatar_url
+
+    # Migrate legacy absolute paths stored in DB (Windows/Linux) to static URL paths.
+    lower_avatar = avatar_url.replace('\\', '/').lower()
+    if '/static/profile_photos/' in lower_avatar:
+        filename = os.path.basename(avatar_url.replace('\\', '/'))
+        if filename:
+            return f'/static/profile_photos/{filename}'
+
+    return DEFAULT_AVATAR_URLS[0]
+
+
+def _is_allowed_profile_photo(filename):
+    if not filename:
+        return False
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    return ext in ALLOWED_PROFILE_PHOTO_EXTENSIONS
+
+def _default_profile():
+    row = db.fetch_one(
+        'SELECT * FROM profiles WHERE user_id = ? AND is_default = 1 ORDER BY created_at ASC LIMIT 1',
+        ('local_user',),
+        db_name='flix'
+    )
+    if row:
+        return row
+    row = db.fetch_one(
+        'SELECT * FROM profiles WHERE user_id = ? AND lower(profile_name) = lower(?) ORDER BY created_at ASC LIMIT 1',
+        ('local_user', 'Guest'),
+        db_name='flix'
+    )
+    if row:
+        db.execute_query('UPDATE profiles SET is_default = 0 WHERE user_id = ?', ('local_user',), db_name='flix')
+        db.execute_query('UPDATE profiles SET is_default = 1 WHERE id = ?', (row.get('id'),), db_name='flix')
+        return row
+    return db.fetch_one('SELECT * FROM profiles WHERE user_id = ? ORDER BY created_at ASC LIMIT 1', ('local_user',), db_name='flix')
+
+
+def get_active_profile(profile_id=None, profile_name=None):
+    pid = (profile_id or '').strip() or (session.get('profile_id') or '').strip()
     pname = (profile_name or '').strip()
 
+    row = None
     if pid:
-        row = db.fetch_one('SELECT * FROM profiles WHERE id = ?', (pid,))
-        if row:
-            return row
+        row = db.fetch_one('SELECT * FROM profiles WHERE id = ?', (pid,), db_name='flix')
 
-    if pname:
-        existing = db.fetch_one(
-            'SELECT * FROM profiles WHERE user_id = ? AND lower(profile_name) = lower(?)',
-            ('local_user', pname)
+    if not row and pname:
+        row = db.fetch_one(
+            'SELECT * FROM profiles WHERE user_id = ? AND lower(trim(profile_name)) = lower(trim(?))',
+            ('local_user', pname),
+            db_name='flix'
         )
-        if existing:
-            return existing
 
-        new_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
-        db.execute_query(
-            'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
-            (new_id, 'local_user', pname, avatar or '👤', now)
-        )
-        return db.fetch_one('SELECT * FROM profiles WHERE id = ?', (new_id,))
+    if not row:
+        row = _default_profile()
 
-    return db.fetch_one('SELECT * FROM profiles ORDER BY created_at ASC LIMIT 1')
+    if row and row.get('id'):
+        session['profile_id'] = row.get('id')
+    return row
+
+
+def _resolve_profile(profile_id=None, profile_name=None, avatar='👤'):
+    # Backward-compatible wrapper used by existing routes.
+    return get_active_profile(profile_id=profile_id, profile_name=profile_name)
 
 def _float_or_zero(value):
     try:
@@ -347,14 +454,60 @@ def _int_or_zero(value):
     except Exception:
         return 0
 
+
+def _poster_path_to_url(value):
+    raw = (value or '').strip()
+    if not raw:
+        return '/static/no-poster.png'
+    if raw.startswith('/static/') or raw.startswith('/tmdb_image'):
+        return raw
+    if raw.startswith('/'):
+        abs_url = f'https://image.tmdb.org/t/p/w500{raw}'
+        return f"/tmdb_image?url={urllib.parse.quote(abs_url, safe='')}"
+    if 'image.tmdb.org/t/p/' in raw:
+        return f"/tmdb_image?url={urllib.parse.quote(raw, safe='')}"
+    return raw
+
+
+def _enrich_watch_item(item):
+    if not item:
+        return item
+
+    tmdb_id = str(item.get('tmdb_id') or item.get('tmdbId') or '').strip()
+    media_type = (item.get('media_type') or item.get('mediaType') or 'movie').strip().lower()
+    title = (item.get('title') or '').strip()
+    poster_path = (item.get('poster_path') or item.get('posterPath') or item.get('poster') or '').strip()
+
+    if tmdb_id and (not title or not poster_path):
+        try:
+            details = _tmdb_fetch(f'/{media_type}/{tmdb_id}')
+            if not title:
+                title = (details.get('title') or details.get('name') or '').strip()
+            if not poster_path:
+                poster_path = (details.get('poster_path') or '').strip()
+        except Exception:
+            pass
+
+    poster_url = _poster_path_to_url(poster_path)
+    if title:
+        item['title'] = title
+    item['poster_path'] = poster_path
+    item['posterPath'] = poster_path
+    item['poster'] = poster_url
+    item['tmdb_id'] = tmdb_id or item.get('tmdb_id')
+    item['media_type'] = media_type
+    item['tmdbId'] = item.get('tmdbId') or item.get('tmdb_id')
+    item['mediaType'] = item.get('mediaType') or item.get('media_type')
+    return item
+
 @app.route('/api/movies/profiles', methods=['GET'])
 def api_movies_profiles_get():
-    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    rows = db.fetch_all('SELECT id, profile_name, avatar, avatar_url, is_default, created_at FROM profiles ORDER BY is_default DESC, created_at ASC')
     if rows:
         return jsonify([_normalize_profile(r) for r in rows])
 
     defaults = [
-        {'id': 'guest', 'name': 'Guest', 'emoji': '👤'},
+        {'id': 'guest', 'name': 'Guest', 'avatar_url': DEFAULT_AVATAR_URLS[0]},
     ]
     now = datetime.utcnow().isoformat()
     for p in defaults:
@@ -362,31 +515,61 @@ def api_movies_profiles_get():
         if not name:
             continue
         db.execute_query(
-            'INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
-            (p.get('id') or str(uuid.uuid4()), 'local_user', name, p.get('emoji') or '👤', now)
+            'INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, avatar_url, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (
+                p.get('id') or str(uuid.uuid4()),
+                'local_user',
+                name,
+                _sanitize_avatar_url(p.get('avatar_url')),
+                _sanitize_avatar_url(p.get('avatar_url')),
+                1 if name.lower() == 'guest' else 0,
+                now,
+            )
         )
 
-    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    rows = db.fetch_all('SELECT id, profile_name, avatar, avatar_url, is_default, created_at FROM profiles ORDER BY is_default DESC, created_at ASC')
     return jsonify([_normalize_profile(r) for r in rows])
 
 @app.route('/api/profiles', methods=['GET'])
 def api_profiles_get():
-    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    rows = db.fetch_all('SELECT id, profile_name, avatar, avatar_url, is_default, created_at FROM profiles ORDER BY is_default DESC, created_at ASC', db_name='flix')
     return jsonify([
         {
             'id': r.get('id'),
             'name': r.get('profile_name'),
-            'avatar': r.get('avatar') or '👤',
+            'avatar_url': _sanitize_avatar_url(r.get('avatar_url') or r.get('avatar')),
+            'avatar': _sanitize_avatar_url(r.get('avatar_url') or r.get('avatar')),
+            'is_default': bool(r.get('is_default')),
             'created_at': r.get('created_at')
         }
         for r in rows
     ])
 
+
+@app.route('/api/profile/active', methods=['GET'])
+def api_profile_active_get():
+    profile = get_active_profile(
+        profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=request.args.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'error': 'No profile available'}), 404
+    return jsonify({'profile': _normalize_profile(profile)})
+
+
+@app.route('/api/profile/active', methods=['POST'])
+def api_profile_active_set():
+    data = request.get_json(silent=True) or {}
+    profile = get_active_profile(profile_id=data.get('profile_id'), profile_name=data.get('profile_name'))
+    if not profile:
+        return jsonify({'error': 'Profile not found'}), 404
+    return jsonify({'success': True, 'profile': _normalize_profile(profile)})
+
 @app.route('/api/profiles/create', methods=['POST'])
 def api_profiles_create():
     data = request.get_json(silent=True) or {}
     profile_name = (data.get('name') or data.get('profile_name') or '').strip()
-    avatar = (data.get('avatar') or data.get('emoji') or '👤').strip() or '👤'
+    avatar_url = _sanitize_avatar_url(data.get('avatar_url') or data.get('avatar') or data.get('emoji'))
 
     if not profile_name:
         return jsonify({'error': 'name is required'}), 400
@@ -401,8 +584,9 @@ def api_profiles_create():
     profile_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
     db.execute_query(
-        'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
-        (profile_id, 'local_user', profile_name, avatar, created_at)
+        'INSERT INTO profiles (id, user_id, profile_name, avatar, avatar_url, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (profile_id, 'local_user', profile_name, avatar_url, avatar_url, 0, created_at),
+        db_name='flix'
     )
 
     return jsonify({
@@ -410,22 +594,105 @@ def api_profiles_create():
         'profile': {
             'id': profile_id,
             'name': profile_name,
-            'avatar': avatar,
+            'avatar_url': avatar_url,
+            'avatar': avatar_url,
             'created_at': created_at
         }
     })
 
+
+@app.route('/api/profiles/update', methods=['POST'])
+def api_profiles_update():
+    data = request.get_json(silent=True) or {}
+    profile_id = (data.get('id') or data.get('profile_id') or '').strip()
+    profile_name = (data.get('name') or data.get('profile_name') or '').strip()
+    requested_avatar = data.get('avatar_url') or data.get('avatar') or data.get('emoji')
+
+    if not profile_id:
+        return jsonify({'error': 'profile_id is required'}), 400
+
+    existing = db.fetch_one('SELECT id, profile_name, avatar, avatar_url, is_default FROM profiles WHERE id = ? AND user_id = ?', (profile_id, 'local_user'), db_name='flix')
+    if not existing:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    update_name = profile_name or existing.get('profile_name')
+    duplicate = db.fetch_one(
+        'SELECT id FROM profiles WHERE user_id = ? AND lower(trim(profile_name)) = lower(trim(?)) AND id <> ?',
+        ('local_user', update_name, profile_id),
+        db_name='flix'
+    )
+    if duplicate:
+        return jsonify({'error': 'Profile name already exists'}), 409
+
+    avatar_url = _sanitize_avatar_url(requested_avatar) if requested_avatar else _sanitize_avatar_url(existing.get('avatar_url') or existing.get('avatar'))
+
+    db.execute_query(
+        'UPDATE profiles SET profile_name = ?, avatar = ?, avatar_url = ? WHERE id = ?',
+        (update_name, avatar_url, avatar_url, profile_id),
+        db_name='flix'
+    )
+    row = db.fetch_one('SELECT id, profile_name, avatar, avatar_url, is_default, created_at FROM profiles WHERE id = ?', (profile_id,), db_name='flix')
+    if row and row.get('is_default'):
+        session['profile_id'] = row.get('id')
+    return jsonify({'success': True, 'profile': _normalize_profile(row)})
+
 @app.route('/api/movies/profile/resolve', methods=['POST'])
 def api_movies_profile_resolve():
     data = request.get_json(silent=True) or {}
-    profile = _resolve_profile(
+    profile = get_active_profile(
         profile_id=data.get('profile_id'),
-        profile_name=data.get('profile_name'),
-        avatar=data.get('avatar') or '👤'
+        profile_name=data.get('profile_name')
     )
     if not profile:
         return jsonify({'error': 'Unable to resolve profile'}), 400
     return jsonify({'profile': _normalize_profile(profile)})
+
+
+@app.route('/api/upload-profile-photo', methods=['POST'])
+def api_upload_profile_photo():
+    profile_id = (request.form.get('profile_id') or '').strip()
+    if not profile_id:
+        return jsonify({'error': 'profile_id is required'}), 400
+
+    profile = db.fetch_one('SELECT id FROM profiles WHERE id = ? AND user_id = ?', (profile_id, 'local_user'), db_name='flix')
+    if not profile:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    file = request.files.get('photo')
+    if not file or not file.filename:
+        return jsonify({'error': 'photo file is required'}), 400
+
+    safe_name = secure_filename(file.filename)
+    if not _is_allowed_profile_photo(safe_name):
+        return jsonify({'error': 'Only PNG, JPG, JPEG, WEBP are allowed'}), 400
+
+    if (file.mimetype or '').lower() not in ALLOWED_PROFILE_PHOTO_MIME_TYPES:
+        return jsonify({'error': 'Invalid image content type'}), 400
+
+    content_length = request.content_length or 0
+    if content_length > MAX_PROFILE_PHOTO_BYTES + 1024:
+        return jsonify({'error': 'File size exceeds 2MB'}), 413
+
+    file.stream.seek(0, os.SEEK_END)
+    file_size = file.stream.tell()
+    file.stream.seek(0)
+    if file_size > MAX_PROFILE_PHOTO_BYTES:
+        return jsonify({'error': 'File size exceeds 2MB'}), 413
+
+    ext = safe_name.rsplit('.', 1)[-1].lower()
+    timestamp = int(time.time())
+    filename = f'profile_{profile_id}_{timestamp}.{ext}'
+    abs_path = os.path.join(PROFILE_PHOTOS_DIR, filename)
+    file.save(abs_path)
+
+    avatar_url = f'/static/profile_photos/{filename}'
+    db.execute_query(
+        'UPDATE profiles SET avatar = ?, avatar_url = ? WHERE id = ?',
+        (avatar_url, avatar_url, profile_id),
+        db_name='flix'
+    )
+
+    return jsonify({'success': True, 'avatar_url': avatar_url, 'image_url': avatar_url})
 
 @app.route('/api/movies/profiles', methods=['POST'])
 @admin_required
@@ -437,7 +704,7 @@ def api_movies_profiles_save():
     now = datetime.utcnow().isoformat()
     for p in data:
         profile_name = (p.get('name') or '').strip()
-        avatar = p.get('emoji') or '👤'
+        avatar_url = _sanitize_avatar_url(p.get('avatar_url') or p.get('avatar') or p.get('emoji'))
         if not profile_name:
             continue
         existing = db.fetch_one(
@@ -445,11 +712,12 @@ def api_movies_profiles_save():
             ('local_user', profile_name)
         )
         if existing:
-            db.execute_query('UPDATE profiles SET avatar = ? WHERE id = ?', (avatar, existing['id']))
+            db.execute_query('UPDATE profiles SET avatar = ?, avatar_url = ? WHERE id = ?', (avatar_url, avatar_url, existing['id']), db_name='flix')
         else:
             db.execute_query(
-                'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
-                (str(uuid.uuid4()), 'local_user', profile_name, avatar, now)
+                'INSERT INTO profiles (id, user_id, profile_name, avatar, avatar_url, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (str(uuid.uuid4()), 'local_user', profile_name, avatar_url, avatar_url, 0, now),
+                db_name='flix'
             )
     log_admin_action('profiles_bulk_save', f'count={len(data)}')
     return jsonify({'success': True})
@@ -459,7 +727,7 @@ def api_movies_profiles_save():
 def api_admin_profile_create():
     data = request.get_json(silent=True) or {}
     profile_name = (data.get('name') or data.get('profile_name') or '').strip()
-    avatar = (data.get('emoji') or data.get('avatar') or '👤').strip() or '👤'
+    avatar_url = _sanitize_avatar_url(data.get('avatar_url') or data.get('avatar') or data.get('emoji'))
 
     if not profile_name:
         return jsonify({'error': 'profile_name is required'}), 400
@@ -474,10 +742,11 @@ def api_admin_profile_create():
     profile_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
     db.execute_query(
-        'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
-        (profile_id, 'local_user', profile_name, avatar, created_at)
+        'INSERT INTO profiles (id, user_id, profile_name, avatar, avatar_url, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (profile_id, 'local_user', profile_name, avatar_url, avatar_url, 0, created_at),
+        db_name='flix'
     )
-    row = db.fetch_one('SELECT id, profile_name, avatar, created_at FROM profiles WHERE id = ?', (profile_id,))
+    row = db.fetch_one('SELECT id, profile_name, avatar, avatar_url, created_at FROM profiles WHERE id = ?', (profile_id,))
     log_admin_action('profile_create', f'id={profile_id},name={profile_name}')
     return jsonify({'success': True, 'profile': _normalize_profile(row)})
 
@@ -487,7 +756,7 @@ def api_admin_profile_update():
     data = request.get_json(silent=True) or {}
     profile_id = (data.get('id') or data.get('profile_id') or '').strip()
     profile_name = (data.get('name') or data.get('profile_name') or '').strip()
-    avatar = (data.get('emoji') or data.get('avatar') or '👤').strip() or '👤'
+    avatar_url = _sanitize_avatar_url(data.get('avatar_url') or data.get('avatar') or data.get('emoji'))
 
     if not profile_id:
         return jsonify({'error': 'profile_id is required'}), 400
@@ -499,10 +768,11 @@ def api_admin_profile_update():
         return jsonify({'error': 'Profile not found'}), 404
 
     db.execute_query(
-        'UPDATE profiles SET profile_name = ?, avatar = ? WHERE id = ?',
-        (profile_name, avatar, profile_id)
+        'UPDATE profiles SET profile_name = ?, avatar = ?, avatar_url = ? WHERE id = ?',
+        (profile_name, avatar_url, avatar_url, profile_id),
+        db_name='flix'
     )
-    row = db.fetch_one('SELECT id, profile_name, avatar, created_at FROM profiles WHERE id = ?', (profile_id,))
+    row = db.fetch_one('SELECT id, profile_name, avatar, avatar_url, created_at FROM profiles WHERE id = ?', (profile_id,))
     log_admin_action('profile_update', f'id={profile_id},name={profile_name}')
     return jsonify({'success': True, 'profile': _normalize_profile(row)})
 
@@ -518,44 +788,50 @@ def api_admin_profile_delete():
     if not existing:
         return jsonify({'error': 'Profile not found'}), 404
 
-    db.execute_query('DELETE FROM watch_history WHERE profile_id = ?', (profile_id,))
-    db.execute_query('DELETE FROM resume_progress WHERE profile_id = ?', (profile_id,))
-    db.execute_query('DELETE FROM watchlist WHERE profile_id = ?', (profile_id,))
-    db.execute_query('DELETE FROM profiles WHERE id = ?', (profile_id,))
+    default_row = db.fetch_one('SELECT id FROM profiles WHERE is_default = 1 LIMIT 1', db_name='flix')
+    if default_row and default_row.get('id') == profile_id:
+        return jsonify({'error': 'Default profile cannot be deleted'}), 400
+
+    db.execute_query('DELETE FROM watch_history WHERE profile_id = ?', (profile_id,), db_name='flix')
+    db.execute_query('DELETE FROM resume_progress WHERE profile_id = ?', (profile_id,), db_name='flix')
+    db.execute_query('DELETE FROM watchlist WHERE profile_id = ?', (profile_id,), db_name='flix')
+    db.execute_query('DELETE FROM watch_progress WHERE profile_id = ?', (profile_id,), db_name='flix')
+    db.execute_query('DELETE FROM profiles WHERE id = ?', (profile_id,), db_name='flix')
     log_admin_action('profile_delete', f'id={profile_id}')
     return jsonify({'success': True})
 
-@app.route('/api/movies/resume-progress', methods=['POST'])
-def api_movies_resume_progress_save():
-    data = request.get_json(silent=True) or {}
-
-    content_id = str(data.get('content_id') or '').strip()
-    content_type = (data.get('content_type') or 'movie').strip().lower()
+def _save_watch_progress(data, explicit_profile=None):
+    content_id = str(data.get('content_id') or data.get('tmdb_id') or '').strip()
+    content_type = (data.get('content_type') or data.get('media_type') or 'movie').strip().lower()
     if content_type not in ('movie', 'tv'):
         content_type = 'movie'
     if not content_id:
-        return jsonify({'error': 'content_id is required'}), 400
+        return None, {'error': 'content_id is required'}, 400
 
-    profile = _resolve_profile(
+    profile = explicit_profile or get_active_profile(
         profile_id=data.get('profile_id') or request.headers.get('X-Profile-Id'),
         profile_name=data.get('profile_name')
     )
     if not profile:
-        return jsonify({'error': 'profile is required'}), 400
+        return None, {'error': 'profile is required'}, 400
 
-    ts = max(0, _int_or_zero(data.get('timestamp')))
-    duration = max(0, _int_or_zero(data.get('duration')))
+    ts = max(0, _int_or_zero(data.get('timestamp') or data.get('progress_seconds')))
+    duration = max(0, _int_or_zero(data.get('duration') or data.get('duration_seconds')))
     pct = _float_or_zero(data.get('progress_percent'))
     if pct <= 0 and duration > 0:
         pct = (ts / duration) * 100.0
     pct = max(0.0, min(100.0, pct))
+    completed = 1 if pct >= 95.0 else 0
 
-    now = datetime.utcnow().isoformat()
-    title = (data.get('title') or '').strip()
-    poster = (data.get('poster') or '').strip()
     season = data.get('season')
     episode = data.get('episode')
+    title = (data.get('title') or '').strip()
+    poster = (data.get('poster') or data.get('poster_path') or '').strip()
+    server_used = (data.get('server_used') or '').strip() or None
+    skip_intro_time = data.get('skip_intro_time')
+    now = datetime.utcnow().isoformat()
 
+    # Legacy compatibility for existing APIs/UI.
     db.execute_query('''
         INSERT INTO resume_progress
         (profile_id, content_id, content_type, title, poster, season, episode, timestamp, duration, progress_percent, updated_at)
@@ -570,20 +846,104 @@ def api_movies_resume_progress_save():
             duration = excluded.duration,
             progress_percent = excluded.progress_percent,
             updated_at = excluded.updated_at
-    ''', (profile['id'], content_id, content_type, title, poster, season, episode, ts, duration, pct, now))
+    ''', (profile['id'], content_id, content_type, title, poster, season, episode, ts, duration, pct, now), db_name='flix')
+
+    identity = db.fetch_one('''
+        SELECT id FROM watch_progress
+        WHERE profile_id = ?
+          AND tmdb_id = ?
+          AND media_type = ?
+          AND COALESCE(season, -1) = COALESCE(?, -1)
+          AND COALESCE(episode, -1) = COALESCE(?, -1)
+        LIMIT 1
+    ''', (profile['id'], content_id, content_type, season, episode), db_name='flix')
+
+    progress_id = identity.get('id') if identity else str(uuid.uuid4())
+    db.execute_query('''
+        INSERT INTO watch_progress
+        (id, profile_id, tmdb_id, media_type, title, poster_path, season, episode, progress_seconds, duration_seconds, last_watched, completed, server_used, skip_intro_time, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id)
+        DO UPDATE SET
+            title = COALESCE(NULLIF(excluded.title, ''), watch_progress.title),
+            poster_path = COALESCE(NULLIF(excluded.poster_path, ''), watch_progress.poster_path),
+            progress_seconds = excluded.progress_seconds,
+            duration_seconds = excluded.duration_seconds,
+            last_watched = excluded.last_watched,
+            completed = excluded.completed,
+            server_used = COALESCE(excluded.server_used, watch_progress.server_used),
+            skip_intro_time = COALESCE(excluded.skip_intro_time, watch_progress.skip_intro_time),
+            updated_at = excluded.updated_at
+    ''', (
+        progress_id, profile['id'], content_id, content_type, title, poster, season, episode, ts, duration,
+        now, completed, server_used, skip_intro_time, now
+    ), db_name='flix')
 
     db.execute_query('''
-        INSERT INTO watch_history (id, profile_id, content_id, content_type, timestamp, duration, progress, last_watched)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (str(uuid.uuid4()), profile['id'], content_id, content_type, ts, duration, pct / 100.0, now))
+        INSERT INTO watch_history
+        (id, profile_id, content_id, content_type, title, poster_path, timestamp, duration, duration_seconds, progress, last_watched, tmdb_id, media_type, season, episode, watched_at, progress_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        str(uuid.uuid4()), profile['id'], content_id, content_type, title, poster, ts, duration, duration,
+        pct / 100.0, now, content_id, content_type, season, episode, now, ts
+    ), db_name='flix')
 
-    return jsonify({'success': True})
+    payload = {
+        'profile_id': profile['id'],
+        'tmdb_id': content_id,
+        'media_type': content_type,
+        'season': season,
+        'episode': episode,
+        'progress_seconds': ts,
+        'duration_seconds': duration,
+        'completed': bool(completed),
+        'server_used': server_used,
+        'skip_intro_time': skip_intro_time,
+        'updated_at': now,
+    }
+    return payload, {'success': True, 'progress': payload}, 200
+
+
+def _map_watch_progress_row(row):
+    if not row:
+        return None
+    duration = max(0, _int_or_zero(row.get('duration_seconds')))
+    ts = max(0, _int_or_zero(row.get('progress_seconds')))
+    pct = (float(ts) / duration * 100.0) if duration > 0 else 0.0
+    return {
+        'tmdbId': row.get('tmdb_id'),
+        'mediaType': row.get('media_type'),
+        'tmdb_id': row.get('tmdb_id'),
+        'media_type': row.get('media_type'),
+        'title': row.get('title') or '',
+        'posterPath': row.get('poster_path') or '',
+        'poster_path': row.get('poster_path') or '',
+        'poster': _poster_path_to_url(row.get('poster_path') or ''),
+        'season': row.get('season'),
+        'episode': row.get('episode'),
+        'timestamp': ts,
+        'duration': duration,
+        'progress': max(0.0, min(1.0, pct / 100.0)),
+        'progressPercent': max(0.0, min(100.0, pct)),
+        'completed': bool(row.get('completed')),
+        'serverUsed': row.get('server_used'),
+        'skipIntroTime': row.get('skip_intro_time'),
+        'savedAt': int(datetime.fromisoformat(row.get('updated_at')).timestamp() * 1000) if row.get('updated_at') else 0,
+    }
+
+
+@app.route('/api/movies/resume-progress', methods=['POST'])
+def api_movies_resume_progress_save():
+    data = request.get_json(silent=True) or {}
+    _, body, status = _save_watch_progress(data)
+    return jsonify(body), status
+
 
 @app.route('/api/movies/resume-progress', methods=['GET'])
 def api_movies_resume_progress_get():
     content_id = str(request.args.get('content_id', '')).strip()
     content_type = (request.args.get('content_type', 'movie') or 'movie').strip().lower()
-    profile = _resolve_profile(
+    profile = get_active_profile(
         profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
         profile_name=request.args.get('profile_name')
     )
@@ -592,22 +952,53 @@ def api_movies_resume_progress_get():
 
     if content_id:
         row = db.fetch_one('''
-            SELECT * FROM resume_progress
-            WHERE profile_id = ? AND content_id = ? AND content_type = ?
-        ''', (profile['id'], content_id, content_type))
-        return jsonify({'progress': row})
+            SELECT * FROM watch_progress
+            WHERE profile_id = ? AND tmdb_id = ? AND media_type = ?
+            ORDER BY updated_at DESC
+            LIMIT 1
+        ''', (profile['id'], content_id, content_type), db_name='flix')
+        mapped = _map_watch_progress_row(row)
+        if not mapped:
+            return jsonify({'progress': None})
+        return jsonify({'progress': {
+            'content_id': content_id,
+            'content_type': content_type,
+            'season': mapped.get('season'),
+            'episode': mapped.get('episode'),
+            'timestamp': mapped.get('timestamp'),
+            'duration': mapped.get('duration'),
+            'progress_percent': mapped.get('progressPercent'),
+            'updated_at': row.get('updated_at')
+        }})
 
     rows = db.fetch_all('''
-        SELECT * FROM resume_progress
+        SELECT * FROM watch_progress
         WHERE profile_id = ?
         ORDER BY updated_at DESC
         LIMIT 100
-    ''', (profile['id'],))
-    return jsonify({'items': rows})
+    ''', (profile['id'],), db_name='flix')
+
+    items = []
+    for row in rows:
+        mapped = _map_watch_progress_row(row)
+        if not mapped:
+            continue
+        items.append({
+            'content_id': mapped.get('tmdbId'),
+            'content_type': mapped.get('mediaType'),
+            'season': mapped.get('season'),
+            'episode': mapped.get('episode'),
+            'timestamp': mapped.get('timestamp'),
+            'duration': mapped.get('duration'),
+            'progress_percent': mapped.get('progressPercent'),
+            'updated_at': row.get('updated_at')
+        })
+    return jsonify({'items': items})
+
 
 @app.route('/api/movies/continue-watching', methods=['GET'])
 def api_movies_continue_watching():
-    profile = _resolve_profile(
+    profile = get_active_profile(
         profile_id=request.args.get('profile_id') or request.headers.get('X-Profile-Id'),
         profile_name=request.args.get('profile_name')
     )
@@ -615,31 +1006,192 @@ def api_movies_continue_watching():
         return jsonify({'items': []})
 
     rows = db.fetch_all('''
-        SELECT profile_id, content_id, content_type, title, poster, season, episode, timestamp, duration, progress_percent, updated_at
-        FROM resume_progress
+        SELECT *
+        FROM watch_progress
         WHERE profile_id = ?
-          AND timestamp > 0
-          AND progress_percent < 98
+          AND progress_seconds > 1
+          AND completed = 0
         ORDER BY updated_at DESC
-        LIMIT 40
-    ''', (profile['id'],))
+        LIMIT 80
+    ''', (profile['id'],), db_name='flix')
 
     items = []
     for r in rows:
-        items.append({
-            'tmdbId': r.get('content_id'),
-            'mediaType': r.get('content_type'),
-            'title': r.get('title'),
-            'poster': r.get('poster'),
-            'season': r.get('season'),
-            'episode': r.get('episode'),
-            'timestamp': r.get('timestamp') or 0,
-            'duration': r.get('duration') or 0,
-            'progress': max(0.0, min(1.0, (_float_or_zero(r.get('progress_percent')) / 100.0))),
-            'savedAt': int(datetime.fromisoformat(r.get('updated_at')).timestamp() * 1000) if r.get('updated_at') else 0
-        })
-
+        mapped = _map_watch_progress_row(r)
+        if not mapped:
+            continue
+        if mapped.get('progressPercent', 0.0) >= 95.0:
+            continue
+        items.append(_enrich_watch_item(mapped))
     return jsonify({'items': items})
+
+
+@app.route('/api/progress', methods=['POST'])
+def api_progress_save():
+    data = request.get_json(silent=True) or {}
+    _, body, status = _save_watch_progress(data)
+    return jsonify(body), status
+
+
+@app.route('/api/progress/<profile_id>/<tmdb_id>', methods=['GET'])
+def api_progress_get(profile_id, tmdb_id):
+    media_type = (request.args.get('media_type') or request.args.get('content_type') or 'movie').strip().lower()
+    if media_type not in ('movie', 'tv'):
+        media_type = 'movie'
+
+    row = db.fetch_one('''
+        SELECT *
+        FROM watch_progress
+        WHERE profile_id = ? AND tmdb_id = ? AND media_type = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+    ''', (profile_id, str(tmdb_id), media_type), db_name='flix')
+    mapped = _map_watch_progress_row(row)
+    return jsonify({'progress': mapped})
+
+
+@app.route('/api/continue-watching/<profile_id>', methods=['GET'])
+def api_continue_watching(profile_id):
+    rows = db.fetch_all('''
+        SELECT *
+        FROM watch_progress
+        WHERE profile_id = ?
+          AND progress_seconds > 1
+          AND completed = 0
+        ORDER BY updated_at DESC
+        LIMIT 80
+    ''', (profile_id,), db_name='flix')
+
+    items = []
+    for row in rows:
+        mapped = _map_watch_progress_row(row)
+        if not mapped:
+            continue
+        if mapped.get('progressPercent', 0.0) >= 95.0:
+            continue
+        items.append(_enrich_watch_item(mapped))
+    return jsonify({'items': items})
+
+
+@app.route('/api/recently-watched/<profile_id>', methods=['GET'])
+def api_recently_watched(profile_id):
+    rows = db.fetch_all('''
+        SELECT * FROM watch_progress
+        WHERE profile_id = ?
+        ORDER BY last_watched DESC
+        LIMIT 60
+    ''', (profile_id,), db_name='flix')
+    items = [_enrich_watch_item(m) for m in (_map_watch_progress_row(r) for r in rows) if m]
+    return jsonify({'items': items})
+
+
+@app.route('/api/watch-history/<profile_id>', methods=['GET'])
+def api_watch_history(profile_id):
+    rows = db.fetch_all('''
+        SELECT id, profile_id, COALESCE(tmdb_id, content_id) AS tmdb_id,
+               COALESCE(media_type, content_type) AS media_type,
+               COALESCE(title, '') AS title,
+               COALESCE(poster_path, '') AS poster_path,
+               season, episode, COALESCE(watched_at, last_watched) AS watched_at,
+               COALESCE(progress_seconds, timestamp, 0) AS progress_seconds,
+               COALESCE(duration_seconds, duration, 0) AS duration_seconds
+        FROM watch_history
+        WHERE profile_id = ?
+        ORDER BY COALESCE(watched_at, last_watched) DESC
+        LIMIT 500
+    ''', (profile_id,), db_name='flix')
+    return jsonify({'items': [_enrich_watch_item(r) for r in rows]})
+
+
+@app.route('/api/history', methods=['POST'])
+def api_history_save():
+    data = request.get_json(silent=True) or {}
+    profile = get_active_profile(
+        profile_id=data.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=data.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'error': 'profile is required'}), 400
+
+    tmdb_id = str(data.get('tmdb_id') or data.get('content_id') or '').strip()
+    media_type = (data.get('media_type') or data.get('content_type') or 'movie').strip().lower()
+    if media_type not in ('movie', 'tv'):
+        media_type = 'movie'
+    if not tmdb_id:
+        return jsonify({'error': 'tmdb_id is required'}), 400
+
+    season = data.get('season')
+    episode = data.get('episode')
+    progress_seconds = max(0, _int_or_zero(data.get('progress_seconds') or data.get('timestamp')))
+    duration_seconds = max(0, _int_or_zero(data.get('duration_seconds') or data.get('duration')))
+    progress_ratio = 0.0
+    if duration_seconds > 0:
+        progress_ratio = max(0.0, min(1.0, float(progress_seconds) / float(duration_seconds)))
+
+    title = (data.get('title') or '').strip()
+    poster_path = (data.get('poster_path') or data.get('poster') or '').strip()
+    now = datetime.utcnow().isoformat()
+
+    db.execute_query('''
+        INSERT INTO watch_history
+        (id, profile_id, content_id, content_type, title, poster_path, timestamp, duration, duration_seconds, progress, last_watched, tmdb_id, media_type, season, episode, watched_at, progress_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        str(uuid.uuid4()), profile['id'], tmdb_id, media_type, title, poster_path,
+        progress_seconds, duration_seconds, duration_seconds, progress_ratio,
+        now, tmdb_id, media_type, season, episode, now, progress_seconds
+    ), db_name='flix')
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/skip-intro', methods=['POST'])
+def api_skip_intro_save():
+    data = request.get_json(silent=True) or {}
+    tmdb_id = str(data.get('tmdb_id') or data.get('content_id') or '').strip()
+    if not tmdb_id:
+        return jsonify({'error': 'tmdb_id is required'}), 400
+
+    media_type = (data.get('media_type') or data.get('content_type') or 'movie').strip().lower()
+    if media_type not in ('movie', 'tv'):
+        media_type = 'movie'
+
+    profile = get_active_profile(
+        profile_id=data.get('profile_id') or request.headers.get('X-Profile-Id'),
+        profile_name=data.get('profile_name')
+    )
+    if not profile:
+        return jsonify({'error': 'profile is required'}), 400
+
+    season = data.get('season')
+    episode = data.get('episode')
+    skip_intro_time = max(0, _int_or_zero(data.get('skip_intro_time')))
+    now = datetime.utcnow().isoformat()
+
+    existing = db.fetch_one('''
+        SELECT * FROM watch_progress
+        WHERE profile_id = ?
+          AND tmdb_id = ?
+          AND media_type = ?
+          AND COALESCE(season, -1) = COALESCE(?, -1)
+          AND COALESCE(episode, -1) = COALESCE(?, -1)
+        LIMIT 1
+    ''', (profile['id'], tmdb_id, media_type, season, episode), db_name='flix')
+
+    if existing:
+        db.execute_query(
+            'UPDATE watch_progress SET skip_intro_time = ?, updated_at = ? WHERE id = ?',
+            (skip_intro_time, now, existing.get('id')),
+            db_name='flix'
+        )
+    else:
+        db.execute_query('''
+            INSERT INTO watch_progress
+            (id, profile_id, tmdb_id, media_type, season, episode, progress_seconds, duration_seconds, last_watched, completed, server_used, skip_intro_time, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 0, NULL, ?, ?)
+        ''', (str(uuid.uuid4()), profile['id'], tmdb_id, media_type, season, episode, now, skip_intro_time, now), db_name='flix')
+
+    return jsonify({'success': True, 'skip_intro_time': skip_intro_time})
 
 @app.route('/api/movies/watchlist', methods=['GET'])
 def api_movies_watchlist_get():
@@ -767,191 +1319,438 @@ def api_movies_recommendations():
 @app.route('/api/movies/config', methods=['GET'])
 @admin_required
 def api_movies_config_get():
-    return jsonify({'tmdb_key': _get_tmdb_key()})
+    return jsonify({'tmdb_key': '', 'worker_url': WORKER_URL})
 
 @app.route('/api/movies/config', methods=['POST'])
 @admin_required
 def api_movies_config_save():
-    data = request.get_json(silent=True) or {}
-    key = (data.get('tmdb_key') or '').strip()
-    if not key:
-        return jsonify({'error': 'tmdb_key is required'}), 400
-    _set_tmdb_key(key)
-    log_admin_action('tmdb_key_updated', 'key_updated')
-    return jsonify({'success': True})
+    log_admin_action('tmdb_key_ignored', 'tmdb key config is disabled; worker is used')
+    return jsonify({'success': True, 'message': 'TMDB key is not used by Flask. Metadata is served via worker.'})
 
 @app.route('/api/movies/tmdb-status', methods=['GET'])
 @admin_required
 def api_movies_tmdb_status():
-    import urllib.request, urllib.error, urllib.parse
-    key = _get_tmdb_key()
-    if not key:
-        return jsonify({'status': 'no_key', 'message': 'No TMDB API key configured'})
+    if not WORKER_URL:
+        return jsonify({'status': 'unreachable', 'message': 'Metadata worker URL is not configured'})
     try:
-        target_url = f'https://api.themoviedb.org/3/configuration?api_key={key}'
-        url = f"{TMDB_PROXY_WORKER_URL}?target={urllib.parse.quote(target_url, safe='')}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'ToxibhFlix/1.0'})
-        with urllib.request.urlopen(req, timeout=5) as res:
-            if res.status == 200:
-                return jsonify({'status': 'ok', 'message': 'TMDB API is reachable ✓', 'code': 200})
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
-            return jsonify({'status': 'invalid_key', 'message': 'Invalid API key (401)', 'code': 401})
-        return jsonify({'status': 'error', 'message': f'HTTP {e.code}', 'code': e.code})
+        res = req_session.get(f'{WORKER_URL}/movie/popular', timeout=5, headers={'User-Agent': 'ToxibhFlix/1.0'})
+        if res.status_code == 200:
+            return jsonify({'status': 'ok', 'message': 'Metadata worker is reachable', 'code': 200})
+        return jsonify({'status': 'error', 'message': f'HTTP {res.status_code}', 'code': res.status_code})
     except Exception as ex:
         return jsonify({'status': 'unreachable', 'message': str(ex)})
     return jsonify({'status': 'unknown'})
+
+
+def get_stream_servers(tmdb_id, type, season=None, episode=None):
+    media_type = (type or 'movie').strip().lower()
+    tmdb_id = str(tmdb_id).strip()
+    if not tmdb_id:
+        return []
+
+    s = int(season or 1)
+    e = int(episode or 1)
+
+    def _url_for(server_key):
+        if media_type == 'tv':
+            if server_key == 'vidfast':
+                return f'https://vidfast.pro/tv/{tmdb_id}/{s}/{e}?autoPlay=true'
+            if server_key == 'vidking':
+                return f'https://www.vidking.net/embed/tv/{tmdb_id}/{s}/{e}?color=00f5ff&autoPlay=true'
+            if server_key == 'vidsrc':
+                return f'https://vidsrc.to/embed/tv/{tmdb_id}/{s}/{e}'
+            if server_key == 'vidsrc2':
+                return f'https://vidsrc.me/embed/tv/{tmdb_id}/{s}/{e}'
+            if server_key == 'embed_su':
+                return f'https://embed.su/embed/tv/{tmdb_id}/{s}/{e}'
+            if server_key == 'autoembed':
+                return f'https://autoembed.cc/embed/tv/{tmdb_id}/{s}/{e}'
+            if server_key == 'superembed':
+                return f'https://multiembed.mov/?video_id={tmdb_id}&tmdb=1&s={s}&e={e}'
+            if server_key == '2embed':
+                return f'https://www.2embed.cc/embedtv/{tmdb_id}&s={s}&e={e}'
+            if server_key == 'multiembed':
+                return f'https://multiembed.mov/?video_id={tmdb_id}&tmdb=1&s={s}&e={e}'
+            if server_key == 'smashystream':
+                return f'https://embed.smashystream.com/playertv.php?tmdb={tmdb_id}&season={s}&episode={e}'
+            if server_key == 'vidsrc_to':
+                return f'https://vidsrc.to/embed/tv/{tmdb_id}/{s}/{e}'
+            if server_key == 'vidsrc_cc':
+                return f'https://vidsrc.cc/embed/tv/{tmdb_id}/{s}/{e}'
+            if server_key == 'vidsrc_me':
+                return f'https://vidsrc.me/embed/tv/{tmdb_id}/{s}/{e}'
+            return ''
+
+        if server_key == 'vidfast':
+            return f'https://vidfast.pro/movie/{tmdb_id}?autoPlay=true'
+        if server_key == 'vidking':
+            return f'https://www.vidking.net/embed/movie/{tmdb_id}?color=00f5ff&autoPlay=true'
+        if server_key == 'vidsrc':
+            return f'https://vidsrc.to/embed/movie/{tmdb_id}'
+        if server_key == 'vidsrc2':
+            return f'https://vidsrc.me/embed/movie/{tmdb_id}'
+        if server_key == 'embed_su':
+            return f'https://embed.su/embed/movie/{tmdb_id}'
+        if server_key == 'autoembed':
+            return f'https://autoembed.cc/embed/movie/{tmdb_id}'
+        if server_key == 'superembed':
+            return f'https://multiembed.mov/?video_id={tmdb_id}&tmdb=1'
+        if server_key == '2embed':
+            return f'https://www.2embed.cc/embed/{tmdb_id}'
+        if server_key == 'multiembed':
+            return f'https://multiembed.mov/?video_id={tmdb_id}&tmdb=1'
+        if server_key == 'smashystream':
+            return f'https://embed.smashystream.com/playere.php?tmdb={tmdb_id}'
+        if server_key == 'vidsrc_to':
+            return f'https://vidsrc.to/embed/movie/{tmdb_id}'
+        if server_key == 'vidsrc_cc':
+            return f'https://vidsrc.cc/embed/movie/{tmdb_id}'
+        if server_key == 'vidsrc_me':
+            return f'https://vidsrc.me/embed/movie/{tmdb_id}'
+        return ''
+
+    servers = []
+    for idx, key in enumerate(STREAM_SERVER_PRIORITY):
+        url = _url_for(key)
+        if not url:
+            continue
+        servers.append({
+            'key': key,
+            'name': STREAM_SERVER_LABELS.get(key, key),
+            'priority': idx + 1,
+            'is_primary': key == 'vidfast',
+            'url': url,
+        })
+    return servers
+
+
+@app.route('/api/movies/stream-servers', methods=['GET'])
+def api_movies_stream_servers():
+    tmdb_id = (request.args.get('id') or '').strip()
+    media_type = (request.args.get('type') or 'movie').strip().lower()
+    if media_type not in ('movie', 'tv'):
+        media_type = 'movie'
+
+    if not tmdb_id:
+        return jsonify({'error': 'id is required'}), 400
+
+    season = request.args.get('season', type=int)
+    episode = request.args.get('episode', type=int)
+    servers = get_stream_servers(tmdb_id, media_type, season=season, episode=episode)
+
+    return jsonify({
+        'default_server': 'vidfast',
+        'media_type': media_type,
+        'servers': servers,
+    })
 
 # ── TMDB PROXY API ────────────────────────────────────────────────
 _TMDB_CACHE = {}
 TMDB_CACHE_TTL = 300  # 5 minutes
 
+
+def _metadata_image_url(path, size='w500'):
+    raw = (path or '').strip()
+    if not raw:
+        return None
+    if raw.startswith('http://') or raw.startswith('https://'):
+        return raw
+    if not raw.startswith('/'):
+        raw = f'/{raw}'
+    return f'https://image.tmdb.org/t/p/{size}{raw}'
+
+
+def _metadata_year(value):
+    raw = (value or '').strip()
+    if not raw:
+        return None
+    return raw.split('-', 1)[0]
+
+
+def _normalize_genres(genres):
+    out = []
+    for g in (genres or []):
+        if isinstance(g, str):
+            name = g.strip()
+        elif isinstance(g, dict):
+            name = (g.get('name') or '').strip()
+        else:
+            name = ''
+        if name:
+            out.append(name)
+    return out
+
+
+def _normalize_seasons(seasons):
+    items = []
+    for season in (seasons or []):
+        if not isinstance(season, dict):
+            continue
+        items.append({
+            'id': season.get('id'),
+            'season_number': season.get('season_number'),
+            'name': season.get('name'),
+            'episode_count': season.get('episode_count'),
+            'air_date': season.get('air_date'),
+            'poster': season.get('poster') or _metadata_image_url(season.get('poster_path'), size='w342')
+        })
+    return items
+
+
+def _normalize_metadata_payload(data, media_type):
+    if not isinstance(data, dict):
+        return None
+
+    title = (data.get('title') or data.get('name') or '').strip()
+    year = data.get('year') or _metadata_year(data.get('release_date') or data.get('first_air_date'))
+    rating = data.get('rating', data.get('vote_average'))
+    try:
+        rating = float(rating) if rating is not None else 0.0
+    except Exception:
+        rating = 0.0
+
+    genres = _normalize_genres(data.get('genres'))
+    seasons = _normalize_seasons(data.get('seasons') if media_type == 'tv' else [])
+
+    return {
+        'id': data.get('id'),
+        'title': title,
+        'poster': data.get('poster') or _metadata_image_url(data.get('poster_path'), size='w500'),
+        'backdrop': data.get('backdrop') or _metadata_image_url(data.get('backdrop_path'), size='original'),
+        'overview': data.get('overview') or '',
+        'year': year,
+        'rating': rating,
+        'genres': genres,
+        'seasons': seasons,
+        'media_type': media_type,
+    }
+
+
+def _worker_fetch_json(path, timeout=6):
+    if not WORKER_URL or 'your-worker.workers.dev' in WORKER_URL:
+        raise RuntimeError('Metadata worker is not configured')
+
+    url = f'{WORKER_URL}{path}'
+    res = req_session.get(url, timeout=timeout, headers={'User-Agent': 'ToxibhFlix/1.0'})
+    if res.status_code >= 400:
+        raise RuntimeError(f'Worker HTTP {res.status_code}')
+    return res.json()
+
+
+def get_movie_data(tmdb_id):
+    tmdb_id = int(tmdb_id)
+    try:
+        worker_data = _worker_fetch_json(f'/movie/{tmdb_id}')
+        normalized = _normalize_metadata_payload(worker_data, 'movie')
+        if normalized and normalized.get('id'):
+            return normalized, 'worker'
+    except Exception:
+        pass
+
+    direct = _tmdb_fetch(f'/movie/{tmdb_id}')
+    return _normalize_metadata_payload(direct, 'movie'), 'tmdb'
+
+
+def get_tv_data(tmdb_id):
+    tmdb_id = int(tmdb_id)
+    try:
+        worker_data = _worker_fetch_json(f'/tv/{tmdb_id}')
+        normalized = _normalize_metadata_payload(worker_data, 'tv')
+        if normalized and normalized.get('id'):
+            return normalized, 'worker'
+    except Exception:
+        pass
+
+    direct = _tmdb_fetch(f'/tv/{tmdb_id}')
+    return _normalize_metadata_payload(direct, 'tv'), 'tmdb'
+
+
+def get_search_data(query, page=1):
+    q = (query or '').strip()
+    if not q:
+        return {'results': []}, 'worker'
+
+    page_num = int(page or 1)
+    if page_num < 1:
+        page_num = 1
+
+    try:
+        encoded = quote(q, safe='')
+        worker_data = _worker_fetch_json(f'/search/{encoded}?page={page_num}')
+        source_results = []
+        if isinstance(worker_data, list):
+            source_results = worker_data
+        elif isinstance(worker_data, dict) and isinstance(worker_data.get('results'), list):
+            source_results = worker_data.get('results', [])
+
+        if source_results:
+            results = []
+            for item in source_results:
+                media_type = (item.get('media_type') or 'movie').strip().lower()
+                if media_type not in ('movie', 'tv'):
+                    media_type = 'movie'
+                normalized = _normalize_metadata_payload(item, media_type)
+                if not normalized:
+                    continue
+                results.append(normalized)
+            return {'results': results}, 'worker'
+    except Exception:
+        pass
+
+    direct = _tmdb_fetch('/search/multi', {'query': q, 'page': page_num})
+    results = []
+    for item in direct.get('results', []):
+        media_type = (item.get('media_type') or '').strip().lower()
+        if media_type not in ('movie', 'tv'):
+            continue
+        normalized = _normalize_metadata_payload(item, media_type)
+        if not normalized:
+            continue
+        results.append(normalized)
+    return {'results': results}, 'tmdb'
+
+
+@app.route('/api/movie/<int:tmdb_id>', methods=['GET'])
+def api_movie_metadata(tmdb_id):
+    data, source = get_movie_data(tmdb_id)
+    if not data:
+        return jsonify({'error': 'Metadata not found'}), 404
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    resp.headers['X-Metadata-Source'] = source
+    return resp
+
+
+@app.route('/api/tv/<int:tmdb_id>', methods=['GET'])
+def api_tv_metadata(tmdb_id):
+    data, source = get_tv_data(tmdb_id)
+    if not data:
+        return jsonify({'error': 'Metadata not found'}), 404
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    resp.headers['X-Metadata-Source'] = source
+    return resp
+
+
+@app.route('/api/search/<path:query>', methods=['GET'])
+def api_search_metadata_path(query):
+    page = request.args.get('page', 1, type=int)
+    data, source = get_search_data(query, page=page)
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'public, max-age=900'
+    resp.headers['X-Metadata-Source'] = source
+    return resp
+
+
+@app.route('/api/search', methods=['GET'])
+def api_search_metadata_query():
+    query = request.args.get('q', '')
+    page = request.args.get('page', 1, type=int)
+    data, source = get_search_data(query, page=page)
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'public, max-age=900'
+    resp.headers['X-Metadata-Source'] = source
+    return resp
+
+def _tmdb_empty_payload(path=''):
+    normalized = (path or '').strip('/').lower()
+    if normalized.endswith('/videos'):
+        return {'results': []}
+    if normalized.endswith('/recommendations'):
+        return {'results': []}
+    if normalized.endswith('/credits'):
+        return {'cast': [], 'crew': []}
+    if normalized.startswith('genre/'):
+        return {'genres': []}
+    if '/season/' in normalized:
+        return {'episodes': []}
+    if normalized.startswith('search') or normalized.startswith('discover'):
+        return {'results': []}
+    if normalized.startswith('movie/') or normalized.startswith('tv/') or normalized.startswith('trending/'):
+        return {'results': []}
+    return {'results': []}
+
+
 def _tmdb_fetch(path, params=None):
-    """Fetch from TMDB using server's IP, with caching."""
-    key = _get_tmdb_key()
-    if not key:
-        abort(500, description="TMDB API key not configured")
-        
-    import urllib.parse
-    
-    # Build URL
-    base_url = f"https://api.themoviedb.org/3{path}"
-    query = {'api_key': key, 'language': 'en-US'}
+    """Fetch TMDB-compatible payloads from the metadata worker with lightweight in-memory caching."""
+    clean_path = f"/{(path or '').lstrip('/')}"
+    query = {'language': 'en-US'}
     if params:
-        query.update(params)
-    
-    target_url = f"{base_url}?{urllib.parse.urlencode(query)}"
-    url = f"{TMDB_PROXY_WORKER_URL}?target={urllib.parse.quote(target_url, safe='')}"
-    
-    # Check cache
+        for key, value in dict(params).items():
+            if value is None or value == '':
+                continue
+            query[key] = value
+
+    target_url = req_session.Request('GET', f"{WORKER_URL}{clean_path}", params=query).prepare().url
     now = time.time()
-    if url in _TMDB_CACHE:
-        cached = _TMDB_CACHE[url]
+    if target_url in _TMDB_CACHE:
+        cached = _TMDB_CACHE[target_url]
         if now - cached['ts'] < TMDB_CACHE_TTL:
             return cached['data']
-            
-    # Fetch
-    import urllib.request, urllib.error
-    req = urllib.request.Request(url, headers={'User-Agent': 'ToxibhFlix/1.0'})
+
     try:
-        with urllib.request.urlopen(req, timeout=10) as res:
-            data = json.loads(res.read())
-            _TMDB_CACHE[url] = {'data': data, 'ts': now}
-            
-            # Basic cleanup of old cache entries
-            if len(_TMDB_CACHE) > 100:
-                expired = [k for k, v in _TMDB_CACHE.items() if now - v['ts'] > TMDB_CACHE_TTL]
-                for k in expired:
-                    _TMDB_CACHE.pop(k, None)
-                    
-            return data
-    except urllib.error.HTTPError as e:
-        abort(e.code, description=f"TMDB API Error: {e.reason}")
-    except Exception as e:
-        abort(502, description=f"Bad Gateway: {str(e)}")
+        res = req_session.get(f"{WORKER_URL}{clean_path}", params=query, timeout=5, headers={'User-Agent': 'ToxibhFlix/1.0'})
+        if res.status_code >= 400:
+            return _tmdb_empty_payload(clean_path)
 
-@app.route('/api/tmdb/trending')
-def tmdb_proxy_trending():
-    return jsonify(_tmdb_fetch('/trending/movie/week'))
+        data = res.json()
+        _TMDB_CACHE[target_url] = {'data': data, 'ts': now}
 
-@app.route('/api/tmdb/popular')
-def tmdb_proxy_popular():
-    return jsonify(_tmdb_fetch('/movie/popular'))
+        if len(_TMDB_CACHE) > 100:
+            expired = [k for k, v in _TMDB_CACHE.items() if now - v['ts'] > TMDB_CACHE_TTL]
+            for k in expired:
+                _TMDB_CACHE.pop(k, None)
 
-@app.route('/api/tmdb/top-rated')
-def tmdb_proxy_top_rated():
-    return jsonify(_tmdb_fetch('/movie/top_rated'))
+        return data
+    except Exception:
+        return _tmdb_empty_payload(clean_path)
 
-@app.route('/api/tmdb/upcoming')
-def tmdb_proxy_upcoming():
-    return jsonify(_tmdb_fetch('/movie/upcoming'))
 
-@app.route('/api/tmdb/search')
-def tmdb_proxy_search():
-    q = request.args.get('q', '')
-    page = request.args.get('page', 1)
-    if not q:
+@app.route('/api/tmdb/<path:subpath>', methods=['GET'])
+def proxy_tmdb(subpath):
+    clean_subpath = (subpath or '').strip('/')
+    if not clean_subpath:
         return jsonify({'results': []})
-    return jsonify(_tmdb_fetch('/search/movie', {'query': q, 'page': page}))
 
-@app.route('/api/tmdb/movie/<int:movie_id>')
-def tmdb_proxy_movie(movie_id):
-    append = request.args.get('append_to_response', 'credits')
-    return jsonify(_tmdb_fetch(f'/movie/{movie_id}', {'append_to_response': append}))
+    worker_url = f"{WORKER_URL}/{clean_subpath}"
+    try:
+        upstream = req_session.get(
+            worker_url,
+            params=request.args,
+            timeout=5,
+            headers={'User-Agent': 'ToxibhFlix/1.0'}
+        )
+        if upstream.status_code >= 400:
+            return jsonify(_tmdb_empty_payload(clean_subpath))
+        return jsonify(upstream.json())
+    except Exception:
+        return jsonify(_tmdb_empty_payload(clean_subpath))
 
-@app.route('/api/tmdb/movie/<int:movie_id>/recommendations')
-def tmdb_proxy_movie_recommendations(movie_id):
-    return jsonify(_tmdb_fetch(f'/movie/{movie_id}/recommendations'))
 
-@app.route('/api/tmdb/movie/<int:movie_id>/videos')
-def tmdb_proxy_movie_videos(movie_id):
-    return jsonify(_tmdb_fetch(f'/movie/{movie_id}/videos'))
+@app.route('/api/tmdb/search', methods=['GET'])
+def proxy_tmdb_search():
+    # Support both `q` and `query` from clients and always map to worker's `query`.
+    query = (request.args.get('query') or request.args.get('q') or '').strip()
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
 
-# ── TMDB TV SHOW PROXY ────────────────────────────────────────────
-@app.route('/api/tmdb/trending/tv')
-def tmdb_proxy_trending_tv():
-    return jsonify(_tmdb_fetch('/trending/tv/week'))
-
-@app.route('/api/tmdb/popular/tv')
-def tmdb_proxy_popular_tv():
-    return jsonify(_tmdb_fetch('/tv/popular'))
-
-@app.route('/api/tmdb/top-rated/tv')
-def tmdb_proxy_top_rated_tv():
-    return jsonify(_tmdb_fetch('/tv/top_rated'))
-
-@app.route('/api/tmdb/airing/tv')
-def tmdb_proxy_airing_tv():
-    return jsonify(_tmdb_fetch('/tv/airing_today'))
-
-@app.route('/api/tmdb/on-air/tv')
-def tmdb_proxy_on_air_tv():
-    return jsonify(_tmdb_fetch('/tv/on_the_air'))
-
-@app.route('/api/tmdb/search/tv')
-def tmdb_proxy_search_tv():
-    q = request.args.get('q', '')
-    page = request.args.get('page', 1)
-    if not q:
+    if not query:
         return jsonify({'results': []})
-    return jsonify(_tmdb_fetch('/search/tv', {'query': q, 'page': page}))
 
-@app.route('/api/tmdb/tv/<int:show_id>')
-def tmdb_proxy_tv_show(show_id):
-    return jsonify(_tmdb_fetch(f'/tv/{show_id}'))
-
-@app.route('/api/tmdb/tv/<int:show_id>/season/<int:season_num>')
-def tmdb_proxy_tv_season(show_id, season_num):
-    return jsonify(_tmdb_fetch(f'/tv/{show_id}/season/{season_num}'))
-
-@app.route('/api/tmdb/tv/<int:show_id>/recommendations')
-def tmdb_proxy_tv_recommendations(show_id):
-    return jsonify(_tmdb_fetch(f'/tv/{show_id}/recommendations'))
-
-@app.route('/api/tmdb/tv/<int:show_id>/videos')
-def tmdb_proxy_tv_videos(show_id):
-    return jsonify(_tmdb_fetch(f'/tv/{show_id}/videos'))
-
-@app.route('/api/tmdb/tv/<int:show_id>/credits')
-def tmdb_proxy_tv_credits(show_id):
-    return jsonify(_tmdb_fetch(f'/tv/{show_id}/credits'))
-
-# ── TMDB GENRES & DISCOVER ────────────────────────────────────────
-@app.route('/api/tmdb/genres/movies')
-def tmdb_proxy_genres_movies():
-    return jsonify(_tmdb_fetch('/genre/movie/list'))
-
-@app.route('/api/tmdb/genres/tv')
-def tmdb_proxy_genres_tv():
-    return jsonify(_tmdb_fetch('/genre/tv/list'))
-
-@app.route('/api/tmdb/discover/movie')
-def tmdb_proxy_discover_movie():
-    return jsonify(_tmdb_fetch('/discover/movie', params=request.args))
-
-@app.route('/api/tmdb/discover/tv')
-def tmdb_proxy_discover_tv():
-    return jsonify(_tmdb_fetch('/discover/tv', params=request.args))
+    worker_url = f"{WORKER_URL}/search/multi"
+    try:
+        upstream = req_session.get(
+            worker_url,
+            params={'query': query, 'page': page},
+            timeout=5,
+            headers={'User-Agent': 'ToxibhFlix/1.0'}
+        )
+        if upstream.status_code >= 400:
+            return jsonify({'results': []})
+        return jsonify(upstream.json())
+    except Exception:
+        return jsonify({'results': []})
 
 @app.route('/tmdb_image')
 def tmdb_image_proxy():
@@ -1954,9 +2753,17 @@ def get_game_leaderboard():
 #  RUN
 # ══════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', '8080'))
     print('\n🚀 TOXIBH FLASK SERVER (SQLite / Termux Cloudflare Deploy)')
-    print('   Portfolio  :  http://localhost:8080')
-    print('   Admin      :  http://localhost:8080/admin\n')
+    print(f'   Portfolio  :  http://{host}:{port}')
+    print(f'   Admin      :  http://{host}:{port}/admin\n')
     _print_qbt_startup_healthcheck()
     print('')
-    app.run(host='0.0.0.0', port=8080, debug=False)
+    try:
+        from waitress import serve
+    except ImportError as ex:
+        raise RuntimeError('Waitress is required. Install it with: pip install waitress') from ex
+
+    # Use Waitress for production serving while preserving Cloudflare-compatible bind settings.
+    serve(app, host=host, port=port, threads=8)

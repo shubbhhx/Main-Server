@@ -390,7 +390,7 @@
     <button type="button" class="watch-hero-audio-btn" id="watch-audio-toggle" aria-label="Unmute trailer" title="Unmute trailer">🔇</button>
   </div>
   <div class="watch-hero-content">
-    <img id="watch-poster" src="/static/img/no-poster.png" alt="">
+    <img id="watch-poster" src="/static/no-poster.png" alt="">
     <div class="watch-meta-col">
       <h1 class="watch-title" id="watch-title">Loading…</h1>
       <div class="watch-meta-row">
@@ -442,13 +442,10 @@
 
 <script src="/movies/script.js?v=4"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    // Show active profile name
-    const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
-    if (p) {
-      const nameEl = document.getElementById('profile-name-display');
-      if (nameEl) nameEl.textContent = p.name;
-    }
+  document.addEventListener('DOMContentLoaded', async function () {
+    const p = await resolveActiveProfile();
+    const nameEl = document.getElementById('profile-name-display');
+    if (nameEl && p) nameEl.textContent = p.name || 'Profile';
     initWatchPage().catch(() => {
       showToast('⚠ Server error. Please try again.');
     });
