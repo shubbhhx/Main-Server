@@ -1,12 +1,10 @@
 {
   "name": "termux-cf-server",
-  "version": "1.0.0",
-  "description": "Lightweight Node.js server for Termux + Cloudflare Tunnel",
-  "main": "server.js",
+  "version": "2.0.0",
+  "description": "Single-command Node.js + Cloudflare Tunnel server for Termux",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
-  "dependencies": {
-    "express": "^4.19.2"
-  }
+  "dependencies": {}
 }
