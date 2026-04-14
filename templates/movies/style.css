@@ -22,24 +22,16 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html {
-  scroll-behavior: smooth;
-  font-size: 17px;
-}
+html { scroll-behavior: smooth; }
 
 body {
   background: var(--nf-bg);
   color: var(--nf-text);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1rem;
   overflow-x: hidden;
   min-height: 100vh;
   position: relative;
 }
-
-button { font-size: 1rem; }
-.movie-title, .poster-title { font-size: 1.05rem; }
-.profile-name, #profile-name-display { font-size: 1rem; }
 
 /* ── SCROLLBAR ───────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -131,15 +123,6 @@ button { font-size: 1rem; }
   border-color: var(--magenta);
   background: rgba(255,0,110,.1);
   box-shadow: var(--glow-m);
-}
-
-.nav-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid rgba(0,245,255,.35);
-  box-shadow: 0 0 10px rgba(0,245,255,.25);
 }
 
 /* ── SEARCH BAR ──────────────────────────────────────────── */

@@ -73,11 +73,6 @@
       <div class="poster-row" id="row-continue"></div>
     </div>
 
-    <div class="row-section" id="row-recent-section" style="display:none;">
-      <div class="row-title">🕘 Recently Watched</div>
-      <div class="poster-row" id="row-recent"></div>
-    </div>
-
     <!-- Top 10 Today -->
     <div class="row-section" id="row-top10-section">
       <div class="row-title">🏆 Top 10 Today</div>
@@ -172,9 +167,6 @@
     <a class="sidebar-link" href="/movies/browse#row-toprated">
       <span class="sidebar-icon">⭐</span> Top Rated
     </a>
-    <a class="sidebar-link" href="/movies/history">
-      <span class="sidebar-icon">🕘</span> History
-    </a>
     <a class="sidebar-link" href="/movies">
       <span class="sidebar-icon">👤</span> Profiles
     </a>
@@ -186,15 +178,18 @@
 
 <script src="/movies/script.js?v=4"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', async function() {
-    const p = await resolveActiveProfile();
-    if (!p || !p.id) {
+  document.addEventListener('DOMContentLoaded', function() {
+    // Show active profile name
+    const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    if (p) {
+      const nameEl = document.getElementById('profile-name-display');
+      if (nameEl) nameEl.textContent = p.name;
+    } else {
+      // No profile — redirect to profiles
       window.location.href = '/movies';
-      return;
     }
-    const nameEl = document.getElementById('profile-name-display');
-    if (nameEl) nameEl.textContent = p.name || 'Profile';
     initIndexPage().catch(() => {});
+    loadContinueWatching('row-continue');
   });
 </script>
 </body>

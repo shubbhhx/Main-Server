@@ -448,7 +448,7 @@
   </div>
   <div class="watch-hero-content">
     <div id="watch-poster-wrap">
-      <img id="watch-poster" src="/static/no-poster.png" alt="" onerror="this.onerror=null;this.src='/static/no-poster.png'">
+      <img id="watch-poster" src="/static/img/no-poster.png" alt="" onerror="this.onerror=null;this.src='/static/img/no-poster.png'">
     </div>
     <div class="watch-meta-col">
 
@@ -527,10 +527,12 @@
 
 <script src="/movies/script.js?v=4"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', async function () {
-    const p = await resolveActiveProfile();
-    const nameEl = document.getElementById('profile-name-display');
-    if (nameEl && p) nameEl.textContent = p.name || 'Profile';
+  document.addEventListener('DOMContentLoaded', function () {
+    const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    if (p) {
+      const nameEl = document.getElementById('profile-name-display');
+      if (nameEl) nameEl.textContent = p.name;
+    }
     initWatchTVPage().catch(() => {
       showToast('⚠ Server error loading show info.');
     });

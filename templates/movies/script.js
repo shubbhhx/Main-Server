@@ -8,41 +8,10 @@ const TMDB_IMAGE_ORIGIN = 'https://image.tmdb.org';
 const IMG_BASE = `${TMDB_IMAGE_ORIGIN}/t/p`;
 const TMDB_IMAGE_PROXY = '/tmdb_image';
 const TMDB_API_BASE = 'https://api.themoviedb.org/3';
-const FALLBACK_POSTER = '/static/no-poster.png';
+const TMDB_API_KEY = 'e1ab6c29240869d03ce20472b94dd2e4';
+const TMDB_WORKER_PROXY = 'https://snowy-bush-2e58.subhamj422.workers.dev/';
+const FALLBACK_POSTER = '/static/img/no-poster.png';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const STREAM_SERVER_TIMEOUT_MS = 6000;
-
-const STREAM_SERVER_PRIORITY = [
-  'vidfast',
-  'vidking',
-  'vidsrc',
-  'vidsrc2',
-  'embed_su',
-  'autoembed',
-  'superembed',
-  '2embed',
-  'multiembed',
-  'smashystream',
-  'vidsrc_to',
-  'vidsrc_cc',
-  'vidsrc_me'
-];
-
-const STREAM_SERVER_LABELS = {
-  vidfast: 'VidFast',
-  vidking: 'VidKing',
-  vidsrc: 'VidSrc',
-  vidsrc2: 'VidSrc2',
-  embed_su: 'Embed.su',
-  autoembed: 'AutoEmbed',
-  superembed: 'SuperEmbed',
-  '2embed': '2Embed',
-  multiembed: 'MultiEmbed',
-  smashystream: 'SmashyStream',
-  vidsrc_to: 'VidSrc.to',
-  vidsrc_cc: 'VidSrc.cc',
-  vidsrc_me: 'VidSrc.me'
-};
 
 const _CURRENT_URL = `${window.location.hostname}${window.location.pathname}${window.location.search}`.toLowerCase();
 const isFlixRoute = window.location.pathname.startsWith('/movies') || _CURRENT_URL.includes('/flix') || _CURRENT_URL.includes('flix');
@@ -293,6 +262,7 @@ function hideThemeLoader(delay = 220) {
 async function tmdb(path, params = {}) {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const query = new URLSearchParams({
+    api_key: TMDB_API_KEY,
     language: 'en-US'
   });
 
@@ -302,7 +272,8 @@ async function tmdb(path, params = {}) {
     }
   });
 
-  const fetchUrl = `/api/tmdb${cleanPath}?${query.toString()}`;
+  const originalApiUrl = `${TMDB_API_BASE}${cleanPath}?${query.toString()}`;
+  const fetchUrl = `${TMDB_WORKER_PROXY}?target=${encodeURIComponent(originalApiUrl)}`;
 
   if (_cache[fetchUrl] && Date.now() - _cache[fetchUrl].ts < CACHE_TTL) {
     return _cache[fetchUrl].data;
@@ -357,94 +328,70 @@ function stillUrl(path, size = 'w300') {
 }
 
 // ── RESUME WATCHING (Per-Profile, Movie + TV) ────────────────────
-// Active profile is resolved from server session.
-
-function _getStoredProfileId() {
-  const profile = _getActiveProfile();
-  return profile && profile.id ? String(profile.id).trim() : '';
-}
+// Storage key: toxibhflix_resume_{profileId}_{tmdbId}
+// Data: { profileId, tmdbId, mediaType, title, poster, season, episode,
+//         timestamp, progress, savedAt }
 
 function _getActiveProfile() {
-  return window.__activeProfile || null;
+  return JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
 }
 
 function _isGuestProfile(profile = _getActiveProfile()) {
-  return !!(profile && profile.isGuest === true);
+  return !!(profile && (profile.isGuest || String(profile.id || '').toLowerCase() === 'guest'));
 }
 
 function _profileQuery() {
-  const pid = _getStoredProfileId();
-  if (!pid) return '';
+  const p = _getActiveProfile();
+  if (!p || _isGuestProfile(p)) return '';
   const q = new URLSearchParams();
-  q.set('profile_id', pid);
+  if (p.id) q.set('profile_id', p.id);
+  if (p.name) q.set('profile_name', p.name);
   return q.toString();
 }
 
 function _profileHeaders() {
+  const p = _getActiveProfile();
   const headers = {};
-  const pid = _getStoredProfileId();
-  if (pid) headers['X-Profile-Id'] = pid;
+  if (p && p.id && !_isGuestProfile(p)) headers['X-Profile-Id'] = p.id;
   return headers;
 }
 
-function _renderActiveProfileInNavbar(profile) {
-  const profileBtn = document.getElementById('profile-btn');
-  const profileName = document.getElementById('profile-name-display');
-  if (profileName && profile && profile.name) profileName.textContent = profile.name;
-  if (!profileBtn || !profile || !profile.avatarUrl) return;
-
-  let avatar = profileBtn.querySelector('.nav-profile-avatar');
-  if (!avatar) {
-    avatar = document.createElement('img');
-    avatar.className = 'nav-avatar nav-profile-avatar';
-    avatar.alt = 'Profile';
-    avatar.style.width = '24px';
-    avatar.style.height = '24px';
-    avatar.style.borderRadius = '50%';
-    avatar.style.objectFit = 'cover';
-    avatar.style.border = '1px solid rgba(0,245,255,.35)';
-    avatar.style.boxShadow = '0 0 10px rgba(0,245,255,.25)';
-    profileBtn.insertBefore(avatar, profileBtn.firstChild);
-  }
-  avatar.onerror = function onAvatarError() {
-    this.onerror = null;
-    this.src = '/static/default-avatar.png';
-  };
-  const avatarUrl = profile.avatarUrl.startsWith('/static/profile_photos/')
-    ? `${profile.avatarUrl}${profile.avatarUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
-    : profile.avatarUrl;
-  avatar.src = avatarUrl;
-}
-
 async function resolveActiveProfile() {
+  const p = _getActiveProfile();
+  if (_isGuestProfile(p)) return p;
+  if (!p || p.id) return p;
   try {
-    const pid = _getStoredProfileId();
-    const q = new URLSearchParams();
-    if (pid) q.set('profile_id', pid);
-    const url = q.toString() ? `/api/profile/active?${q.toString()}` : '/api/profile/active';
-    const res = await fetch(url, { headers: _profileHeaders() });
-    if (!res.ok) return _getActiveProfile();
+    const res = await fetch('/api/movies/profile/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_name: p.name, avatar: p.emoji || '👤' })
+    });
+    if (!res.ok) return p;
     const data = await res.json();
     const resolved = data.profile || null;
     if (resolved) {
       const normalized = {
         id: resolved.id,
         name: resolved.name,
-        avatarUrl: resolved.avatar_url || resolved.avatar || '',
-        isDefault: !!resolved.is_default,
+        emoji: resolved.emoji,
         ts: Date.now()
       };
-      window.__activeProfile = normalized;
-      _renderActiveProfileInNavbar(normalized);
+      localStorage.setItem('toxibhflix_profile', JSON.stringify(normalized));
       return normalized;
     }
   } catch (e) {}
-  return _getActiveProfile();
+  return p;
+}
+
+function _resumeKey(tmdbId) {
+  const p = _getActiveProfile();
+  const pid = p ? (p.name || 'default') : 'default';
+  return `toxibhflix_resume_${pid}_${tmdbId}`;
 }
 
 async function _postResumePayload(payload) {
   try {
-    await fetch('/api/progress', {
+    await fetch('/api/movies/resume-progress', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ..._profileHeaders() },
       body: JSON.stringify(payload)
@@ -456,7 +403,7 @@ function _sendResumePayloadWithBeacon(payload) {
   if (!navigator.sendBeacon) return false;
   try {
     const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-    return navigator.sendBeacon('/api/progress', blob);
+    return navigator.sendBeacon('/api/movies/resume-progress', blob);
   } catch (e) {
     return false;
   }
@@ -480,25 +427,37 @@ function _flushPendingResumeProgress(useBeacon = false) {
 }
 
 function saveProgress(tmdbId, data) {
-  const pid = data.profileId || (_getActiveProfile() || {}).id || _getStoredProfileId();
-  const mediaType = data.mediaType === 'tv' ? 'tv' : 'movie';
-  const timestamp = Math.floor(data.timestamp || 0);
-  const duration = Math.floor(Number(data.duration || 0));
-  const payload = {
-    profile_id: pid || null,
-    content_id: String(tmdbId),
-    content_type: mediaType,
-    tmdb_id: String(tmdbId),
-    media_type: mediaType,
-    title: data.title || '',
-    poster: data.poster || '',
+  // data: { mediaType, timestamp, season?, episode?, title, poster, progress }
+  const key = _resumeKey(tmdbId);
+  const existing = JSON.parse(localStorage.getItem(key) || 'null') || {};
+  const entry = Object.assign({}, existing, {
+    tmdbId: String(tmdbId),
+    mediaType: data.mediaType || 'movie',
+    title: data.title || existing.title || '',
+    poster: data.poster || existing.poster || null,
     season: data.season || null,
     episode: data.episode || null,
-    timestamp: timestamp,
-    progress_seconds: timestamp,
-    duration: duration,
-    duration_seconds: duration,
-    progress_percent: duration > 0 ? (timestamp / duration) * 100 : 0
+    timestamp: Math.floor(data.timestamp || 0),
+    progress: data.progress || 0,
+    savedAt: Date.now()
+  });
+  localStorage.setItem(key, JSON.stringify(entry));
+
+  if (_isGuestProfile()) return;
+
+  const pid = data.profileId || (_getActiveProfile() || {}).id;
+  const payload = {
+    profile_id: pid || null,
+    profile_name: (_getActiveProfile() || {}).name || null,
+    content_id: String(tmdbId),
+    content_type: entry.mediaType || 'movie',
+    title: entry.title || '',
+    poster: entry.poster || '',
+    season: entry.season || null,
+    episode: entry.episode || null,
+    timestamp: entry.timestamp || 0,
+    duration: data.duration || 0,
+    progress_percent: data.duration > 0 ? ((entry.timestamp || 0) / data.duration) * 100 : (entry.progress || 0) * 100
   };
 
   const flushKey = `${payload.content_type}:${payload.content_id}`;
@@ -516,34 +475,54 @@ function saveProgress(tmdbId, data) {
 }
 
 function getProgress(tmdbId) {
-  return null;
+  const key = _resumeKey(tmdbId);
+  return JSON.parse(localStorage.getItem(key) || 'null');
 }
 
 function getContinueWatching() {
-  return [];
+  const p = _getActiveProfile();
+  const pid = p ? (p.name || 'default') : 'default';
+  const prefix = `toxibhflix_resume_${pid}_`;
+  const items = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(prefix)) {
+      try {
+        const val = JSON.parse(localStorage.getItem(k));
+        if (val && val.timestamp > 0) items.push(val);
+      } catch (e) {}
+    }
+  }
+  return items.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 }
 
 async function getServerProgress(tmdbId, mediaType = 'movie') {
-  const p = _getActiveProfile();
-  if (!p?.id) return null;
-  const media = mediaType === 'tv' ? 'tv' : 'movie';
+  if (_isGuestProfile()) return null;
+  const q = new URLSearchParams();
+  q.set('content_id', String(tmdbId));
+  q.set('content_type', mediaType);
+  const pq = _profileQuery();
+  if (pq) {
+    const qp = new URLSearchParams(pq);
+    qp.forEach((v, k) => q.set(k, v));
+  }
   try {
-    const res = await fetch(`/api/progress/${encodeURIComponent(p.id)}/${encodeURIComponent(String(tmdbId))}?media_type=${encodeURIComponent(media)}`, { headers: _profileHeaders() });
+    const res = await fetch(`/api/movies/resume-progress?${q.toString()}`, { headers: _profileHeaders() });
     if (!res.ok) return null;
     const data = await res.json();
-    const gp = data.progress;
-    if (!gp) return null;
+    const p = data.progress;
+    if (!p) return null;
     return {
-      tmdbId: gp.tmdbId,
-      mediaType: gp.mediaType,
-      season: gp.season,
-      episode: gp.episode,
-      timestamp: gp.timestamp || 0,
-      duration: gp.duration || 0,
-      progress: gp.progress || 0,
-      savedAt: gp.savedAt || Date.now(),
-      skipIntroTime: gp.skipIntroTime || 0,
-      serverUsed: gp.serverUsed || null
+      tmdbId: p.content_id,
+      mediaType: p.content_type,
+      title: p.title,
+      poster: p.poster,
+      season: p.season,
+      episode: p.episode,
+      timestamp: p.timestamp || 0,
+      duration: p.duration || 0,
+      progress: (p.progress_percent || 0) / 100,
+      savedAt: p.updated_at ? Date.parse(p.updated_at) : Date.now()
     };
   } catch (e) {
     return null;
@@ -551,10 +530,10 @@ async function getServerProgress(tmdbId, mediaType = 'movie') {
 }
 
 async function getServerContinueWatching() {
-  const p = _getActiveProfile();
-  if (!p?.id) return [];
+  if (_isGuestProfile()) return [];
   try {
-    const url = `/api/continue-watching/${encodeURIComponent(p.id)}`;
+    const pq = _profileQuery();
+    const url = pq ? `/api/movies/continue-watching?${pq}` : '/api/movies/continue-watching';
     const res = await fetch(url, { headers: _profileHeaders() });
     if (!res.ok) return [];
     const data = await res.json();
@@ -575,14 +554,17 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Legacy helpers (unchanged for movie watch page compatibility)
-const _legacyProgressStore = {};
+const PROG_KEY = 'cinematic_progress';
 
 function _legacySaveProgress(movieId, seconds) {
-  _legacyProgressStore[movieId] = { seconds: Math.floor(seconds), ts: Date.now() };
+  const all = JSON.parse(localStorage.getItem(PROG_KEY) || '{}');
+  all[movieId] = { seconds: Math.floor(seconds), ts: Date.now() };
+  localStorage.setItem(PROG_KEY, JSON.stringify(all));
 }
 
 function _legacyGetProgress(movieId) {
-  return _legacyProgressStore[movieId] || null;
+  const all = JSON.parse(localStorage.getItem(PROG_KEY) || '{}');
+  return all[movieId] || null;
 }
 
 function formatTime(sec) {
@@ -597,18 +579,6 @@ window.addEventListener('message', function (event) {
   const payload = event.data;
 
   if (payload === 'video_ended' || payload?.event === 'ended') {
-    if (playbackModalState.contentId) {
-      saveHistoryEvent({
-        tmdb_id: String(playbackModalState.contentId),
-        media_type: playbackModalState.mediaType || (window._currentShowId ? 'tv' : 'movie'),
-        season: playbackModalState.mediaType === 'tv' ? Number(window._currentSeason || 1) : null,
-        episode: playbackModalState.mediaType === 'tv' ? Number(window._currentEpisode || 1) : null,
-        title: playbackModalState.contentTitle || '',
-        poster_path: playbackModalState.contentPoster || '',
-        progress_seconds: Math.max(0, Math.floor(Number(playbackModalState.currentPlaybackSeconds || 0))),
-        duration_seconds: Math.max(0, Math.floor(Number(playbackModalState.durationSeconds || 0)))
-      });
-    }
     if (window._currentShowId) {
       playNextEpisode();
     }
@@ -618,32 +588,9 @@ window.addEventListener('message', function (event) {
   if (!payload || typeof payload !== 'object') return;
   const { type, currentTime, duration, movieId } = payload;
 
-  if (type === 'skip_intro' || payload?.event === 'skip_intro') {
-    const id = playbackModalState.contentId || movieId || window._currentMovieId || window._currentShowId;
-    if (id) {
-      const body = {
-        tmdb_id: String(id),
-        media_type: playbackModalState.mediaType || (window._currentShowId ? 'tv' : 'movie'),
-        season: playbackModalState.mediaType === 'tv' ? Number(window._currentSeason || 1) : null,
-        episode: playbackModalState.mediaType === 'tv' ? Number(window._currentEpisode || 1) : null,
-        skip_intro_time: Math.max(0, Math.floor(Number(currentTime || payload?.time || 0)))
-      };
-      fetch('/api/skip-intro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ..._profileHeaders() },
-        body: JSON.stringify(body)
-      }).catch(() => {});
-    }
-    return;
-  }
-
   if (type === 'timeupdate' && currentTime > 5) {
     const id = movieId || window._currentMovieId || window._currentShowId;
     if (!id) return;
-
-    playbackModalState.contentId = String(id);
-    playbackModalState.currentPlaybackSeconds = Math.max(0, Math.floor(Number(currentTime || 0)));
-    playbackModalState.durationSeconds = Math.max(0, Math.floor(Number(duration || playbackModalState.durationSeconds || 0)));
 
     if (window._currentShowId) {
       // TV show — save with season/episode context
@@ -655,18 +602,18 @@ window.addEventListener('message', function (event) {
         title: window._currentShowTitle || '',
         poster: window._currentShowPoster || null,
         progress: 0,
-        duration: duration || 0,
-        server_used: playbackModalState.currentServerKey || ''
+        duration: duration || 0
       });
     } else {
+      // Movie — save legacy + new format
+      _legacySaveProgress(id, currentTime);
       saveProgress(id, {
         mediaType: 'movie',
         timestamp: currentTime,
         title: window._currentMovieTitle || '',
         poster: window._currentMoviePoster || null,
         progress: 0,
-        duration: duration || 0,
-        server_used: playbackModalState.currentServerKey || ''
+        duration: duration || 0
       });
     }
   }
@@ -1023,301 +970,15 @@ function initCinematicIdleMode() {
   };
 }
 
-function applyVidkingProgress(url, startSeconds = 0) {
-  if (!url || startSeconds <= 5) return url;
-  const joiner = url.includes('?') ? '&' : '?';
-  return `${url}${joiner}progress=${Math.floor(startSeconds)}`;
-}
-
-function buildLocalStreamServers(tmdbId, mediaType = 'movie', season = 1, episode = 1, startSeconds = 0) {
-  const id = String(tmdbId || '').trim();
-  if (!id) return [];
-
-  const s = Number(season || 1) || 1;
-  const e = Number(episode || 1) || 1;
-
-  const movieBuilders = {
-    vidfast: () => `https://vidfast.pro/movie/${id}?autoPlay=true`,
-    vidking: () => applyVidkingProgress(`https://www.vidking.net/embed/movie/${id}?color=00f5ff&autoPlay=true`, startSeconds),
-    vidsrc: () => `https://vidsrc.to/embed/movie/${id}`,
-    vidsrc2: () => `https://vidsrc.me/embed/movie/${id}`,
-    embed_su: () => `https://embed.su/embed/movie/${id}`,
-    autoembed: () => `https://autoembed.cc/embed/movie/${id}`,
-    superembed: () => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
-    '2embed': () => `https://www.2embed.cc/embed/${id}`,
-    multiembed: () => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
-    smashystream: () => `https://embed.smashystream.com/playere.php?tmdb=${id}`,
-    vidsrc_to: () => `https://vidsrc.to/embed/movie/${id}`,
-    vidsrc_cc: () => `https://vidsrc.cc/embed/movie/${id}`,
-    vidsrc_me: () => `https://vidsrc.me/embed/movie/${id}`
-  };
-
-  const tvBuilders = {
-    vidfast: () => `https://vidfast.pro/tv/${id}/${s}/${e}?autoPlay=true`,
-    vidking: () => applyVidkingProgress(`https://www.vidking.net/embed/tv/${id}/${s}/${e}?color=00f5ff&autoPlay=true`, startSeconds),
-    vidsrc: () => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
-    vidsrc2: () => `https://vidsrc.me/embed/tv/${id}/${s}/${e}`,
-    embed_su: () => `https://embed.su/embed/tv/${id}/${s}/${e}`,
-    autoembed: () => `https://autoembed.cc/embed/tv/${id}/${s}/${e}`,
-    superembed: () => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`,
-    '2embed': () => `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`,
-    multiembed: () => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`,
-    smashystream: () => `https://embed.smashystream.com/playertv.php?tmdb=${id}&season=${s}&episode=${e}`,
-    vidsrc_to: () => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
-    vidsrc_cc: () => `https://vidsrc.cc/embed/tv/${id}/${s}/${e}`,
-    vidsrc_me: () => `https://vidsrc.me/embed/tv/${id}/${s}/${e}`
-  };
-
-  const builders = mediaType === 'tv' ? tvBuilders : movieBuilders;
-  return STREAM_SERVER_PRIORITY.map((key, idx) => ({
-    key,
-    name: STREAM_SERVER_LABELS[key] || key,
-    priority: idx + 1,
-    is_primary: key === 'vidfast',
-    url: builders[key] ? builders[key]() : ''
-  })).filter(item => !!item.url);
-}
-
-async function getStreamServers(tmdbId, mediaType = 'movie', season = 1, episode = 1, startSeconds = 0) {
-  const id = String(tmdbId || '').trim();
-  if (!id) return [];
-
-  try {
-    const query = new URLSearchParams({
-      id,
-      type: mediaType === 'tv' ? 'tv' : 'movie'
-    });
-    if (mediaType === 'tv') {
-      query.set('season', String(Number(season || 1) || 1));
-      query.set('episode', String(Number(episode || 1) || 1));
-    }
-    const res = await fetch(`/api/movies/stream-servers?${query.toString()}`);
-    if (res.ok) {
-      const data = await res.json();
-      const servers = Array.isArray(data.servers) ? data.servers : [];
-      return servers.map(item => {
-        const key = item.key || '';
-        let url = item.url || '';
-        if (key === 'vidking') url = applyVidkingProgress(url, startSeconds);
-        return {
-          key,
-          name: item.name || STREAM_SERVER_LABELS[key] || key,
-          priority: Number(item.priority || 0),
-          is_primary: Boolean(item.is_primary),
-          url
-        };
-      }).filter(item => !!item.url);
-    }
-  } catch (e) {}
-
-  return buildLocalStreamServers(id, mediaType, season, episode, startSeconds);
-}
-
 const playbackModalState = {
   isPlaying: false,
   videoUrl: '',
-  contentId: null,
-  contentTitle: '',
-  contentPoster: '',
   currentSeasonNumber: 1,
   currentEpisodeNumber: 1,
   totalEpisodesInSeason: 0,
   mediaType: null,
-  showId: null,
-  serverList: [],
-  currentServerIndex: -1,
-  currentServerKey: '',
-  currentServerName: '',
-  activeAttemptToken: null,
-  activeTimeoutId: null,
-  progressTimerId: null,
-  currentPlaybackSeconds: 0,
-  durationSeconds: 0,
-  skipIntroTime: 0
+  showId: null
 };
-
-function _stopProgressHeartbeat() {
-  if (playbackModalState.progressTimerId) {
-    clearInterval(playbackModalState.progressTimerId);
-    playbackModalState.progressTimerId = null;
-  }
-}
-
-function _persistPlaybackProgressTick() {
-  if (!playbackModalState.isPlaying || !playbackModalState.contentId) return;
-
-  const nextSeconds = Math.max(0, Math.floor((playbackModalState.currentPlaybackSeconds || 0) + 1));
-  playbackModalState.currentPlaybackSeconds = nextSeconds;
-
-  const payload = {
-    mediaType: playbackModalState.mediaType === 'tv' ? 'tv' : 'movie',
-    timestamp: nextSeconds,
-    duration: Math.max(0, Number(playbackModalState.durationSeconds || 0)),
-    season: playbackModalState.mediaType === 'tv' ? Number(playbackModalState.currentSeasonNumber || 1) : null,
-    episode: playbackModalState.mediaType === 'tv' ? Number(playbackModalState.currentEpisodeNumber || 1) : null,
-    title: playbackModalState.contentTitle || '',
-    poster: playbackModalState.contentPoster || '',
-    server_used: playbackModalState.currentServerKey || ''
-  };
-  saveProgress(playbackModalState.contentId, payload);
-}
-
-async function saveHistoryEvent(payload) {
-  try {
-    await fetch('/api/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ..._profileHeaders() },
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {}
-}
-
-function _startProgressHeartbeat() {
-  _stopProgressHeartbeat();
-  playbackModalState.progressTimerId = setInterval(() => {
-    _persistPlaybackProgressTick();
-  }, 1000);
-}
-
-function updatePlaybackServerUI(statusText = '') {
-  const currentServerEl = document.getElementById('video-current-server');
-  const statusEl = document.getElementById('video-server-status');
-  const selectEl = document.getElementById('video-server-select');
-
-  if (currentServerEl) {
-    currentServerEl.textContent = playbackModalState.currentServerName || 'Not selected';
-  }
-  if (statusEl && statusText) {
-    statusEl.textContent = statusText;
-  }
-  if (selectEl && playbackModalState.currentServerKey) {
-    selectEl.value = playbackModalState.currentServerKey;
-  }
-}
-
-function setPlaybackServerList(servers = [], preferredServerKey = 'vidfast') {
-  const normalized = Array.isArray(servers) ? servers.slice() : [];
-  playbackModalState.serverList = normalized;
-
-  const selectEl = document.getElementById('video-server-select');
-  if (selectEl) {
-    selectEl.innerHTML = '';
-    normalized.forEach(server => {
-      const option = document.createElement('option');
-      option.value = server.key;
-      option.textContent = server.name || server.key;
-      selectEl.appendChild(option);
-    });
-  }
-
-  const preferredIndex = normalized.findIndex(s => s.key === preferredServerKey);
-  playbackModalState.currentServerIndex = preferredIndex >= 0 ? preferredIndex : 0;
-}
-
-function failoverToNextServer(reason = 'timeout') {
-  const nextIndex = playbackModalState.currentServerIndex + 1;
-  if (nextIndex < playbackModalState.serverList.length) {
-    showToast('Auto switching...');
-    loadServerAttempt(nextIndex, { reason, autoSwitch: true });
-    return;
-  }
-  updatePlaybackServerUI('All servers failed. Please switch manually.');
-  showToast('All streaming servers failed');
-}
-
-function loadServerAttempt(serverIndex, { reason = '', autoSwitch = false } = {}) {
-  const server = playbackModalState.serverList[serverIndex];
-  const host = document.getElementById('video-playback-host');
-  if (!server || !host) return;
-
-  if (playbackModalState.activeTimeoutId) {
-    clearTimeout(playbackModalState.activeTimeoutId);
-    playbackModalState.activeTimeoutId = null;
-  }
-
-  playbackModalState.currentServerIndex = serverIndex;
-  playbackModalState.currentServerKey = server.key || '';
-  playbackModalState.currentServerName = server.name || server.key || 'Unknown';
-  const attemptToken = `${Date.now()}-${Math.random()}`;
-  playbackModalState.activeAttemptToken = attemptToken;
-
-  const statusPrefix = autoSwitch ? 'Switching server...' : 'Loading server...';
-  updatePlaybackServerUI(`${statusPrefix} ${playbackModalState.currentServerName}`);
-  if (reason) {
-    showToast(`Switching server... (${playbackModalState.currentServerName})`);
-  }
-
-  let loadUrl = server.url;
-  if (server.key === 'vidking' && Number(playbackModalState.currentPlaybackSeconds || 0) > 5) {
-    loadUrl = applyVidkingProgress(loadUrl, playbackModalState.currentPlaybackSeconds);
-  }
-
-  host.innerHTML = `
-    <iframe
-      class="video-playback-frame"
-      src="${loadUrl}"
-      allowfullscreen
-      allow="autoplay; fullscreen; picture-in-picture"
-      referrerpolicy="no-referrer-when-downgrade"
-      title="ToxibhFlix Player (${server.name || server.key})">
-    </iframe>`;
-
-  const iframe = host.querySelector('iframe');
-  if (!iframe) {
-    failoverToNextServer('iframe-missing');
-    return;
-  }
-
-  let settled = false;
-  const markFailed = (failReason) => {
-    if (settled || playbackModalState.activeAttemptToken !== attemptToken) return;
-    settled = true;
-    if (playbackModalState.activeTimeoutId) {
-      clearTimeout(playbackModalState.activeTimeoutId);
-      playbackModalState.activeTimeoutId = null;
-    }
-    failoverToNextServer(failReason || 'failed');
-  };
-
-  const markLoaded = () => {
-    if (settled || playbackModalState.activeAttemptToken !== attemptToken) return;
-    settled = true;
-    if (playbackModalState.activeTimeoutId) {
-      clearTimeout(playbackModalState.activeTimeoutId);
-      playbackModalState.activeTimeoutId = null;
-    }
-
-    // Cross-origin frames cannot be inspected deeply; this catches obvious blank loads.
-    try {
-      const href = iframe.contentWindow?.location?.href || '';
-      if (!href || href === 'about:blank') {
-        markFailed('blank');
-        return;
-      }
-    } catch (e) {
-      // Cross-origin access is expected here and means the frame navigated.
-    }
-
-    updatePlaybackServerUI(`Current Server: ${playbackModalState.currentServerName}`);
-  };
-
-  iframe.addEventListener('load', markLoaded, { once: true });
-  iframe.addEventListener('error', () => markFailed('iframe-error'), { once: true });
-
-  playbackModalState.activeTimeoutId = window.setTimeout(() => {
-    markFailed('timeout');
-  }, STREAM_SERVER_TIMEOUT_MS);
-}
-
-function manuallySwitchPlaybackServer() {
-  const selectEl = document.getElementById('video-server-select');
-  if (!selectEl) return;
-  const selectedKey = selectEl.value;
-  const serverIndex = playbackModalState.serverList.findIndex(s => s.key === selectedKey);
-  if (serverIndex < 0) return;
-  showToast('Switching server...');
-  loadServerAttempt(serverIndex, { reason: 'manual-switch', autoSwitch: false });
-}
 
 function ensurePlaybackOverlay() {
   if (!document.getElementById('video-playback-overlay-style')) {
@@ -1426,118 +1087,6 @@ function ensurePlaybackOverlay() {
         opacity: 0.55;
         cursor: not-allowed;
       }
-      .video-playback-skip-intro {
-        position: fixed;
-        right: 22px;
-        top: 138px;
-        z-index: 10000;
-        display: none;
-        align-items: center;
-        gap: 8px;
-        min-height: 44px;
-        padding: 0 14px;
-        border: 1px solid rgba(255,255,255,0.35);
-        border-radius: 999px;
-        background: rgba(0,0,0,0.7);
-        color: #fff;
-        font-family: 'Orbitron', monospace;
-        font-size: 0.66rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        cursor: pointer;
-      }
-      .video-playback-skip-intro.visible {
-        display: inline-flex;
-      }
-      .video-playback-skip-intro:hover:not(:disabled) {
-        border-color: var(--magenta);
-        box-shadow: 0 0 14px rgba(255,0,110,0.35);
-      }
-      .video-playback-server-panel {
-        position: fixed;
-        left: 18px;
-        top: 18px;
-        z-index: 10000;
-        min-width: 280px;
-        max-width: min(520px, calc(100vw - 110px));
-        display: grid;
-        gap: 8px;
-        border: 1px solid rgba(0,245,255,0.32);
-        border-radius: 12px;
-        padding: 10px;
-        background: rgba(0,0,0,0.56);
-        backdrop-filter: blur(10px);
-      }
-      .video-playback-server-current {
-        color: var(--nf-text);
-        font-family: 'Share Tech Mono', monospace;
-        font-size: 0.62rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-      .video-playback-server-row {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 8px;
-      }
-      .video-playback-server-select {
-        min-height: 38px;
-        border: 1px solid rgba(0,245,255,0.35);
-        border-radius: 9px;
-        background: rgba(10,10,15,0.8);
-        color: var(--nf-text);
-        padding: 0 10px;
-        font-family: 'Share Tech Mono', monospace;
-        font-size: 0.7rem;
-      }
-      .video-playback-server-switch {
-        min-height: 38px;
-        border: 1px solid rgba(0,245,255,0.42);
-        border-radius: 9px;
-        background: rgba(0,0,0,0.65);
-        color: var(--nf-text);
-        font-family: 'Orbitron', monospace;
-        font-size: 0.62rem;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        padding: 0 12px;
-        cursor: pointer;
-      }
-      .video-playback-server-switch:hover {
-        border-color: var(--cyan);
-        color: var(--cyan);
-      }
-      .video-playback-server-status {
-        color: var(--nf-muted);
-        font-family: 'Share Tech Mono', monospace;
-        font-size: 0.58rem;
-        letter-spacing: 0.06em;
-        min-height: 14px;
-      }
-      @media (max-width: 768px) {
-        .video-playback-server-panel {
-          top: 12px;
-          left: 12px;
-          right: 12px;
-          max-width: none;
-          min-width: 0;
-        }
-        .video-playback-server-row {
-          grid-template-columns: 1fr;
-        }
-        .video-playback-close {
-          top: 112px;
-          right: 12px;
-        }
-        .video-playback-next {
-          top: 170px;
-          right: 12px;
-        }
-        .video-playback-skip-intro {
-          top: 224px;
-          right: 12px;
-        }
-      }
     `;
     document.head.appendChild(style);
   }
@@ -1546,31 +1095,19 @@ function ensurePlaybackOverlay() {
     const overlay = document.createElement('div');
     overlay.id = 'video-playback-overlay';
     overlay.innerHTML = `
-      <div class="video-playback-server-panel" id="video-playback-server-panel">
-        <div class="video-playback-server-current">Current Server: <span id="video-current-server">Not selected</span></div>
-        <div class="video-playback-server-row">
-          <select class="video-playback-server-select" id="video-server-select" aria-label="Select streaming server"></select>
-          <button type="button" class="video-playback-server-switch" id="video-server-switch" aria-label="Switch server">Switch Server</button>
-        </div>
-        <div class="video-playback-server-status" id="video-server-status"></div>
-      </div>
       <button type="button" class="video-playback-close" id="video-playback-close" aria-label="Close player">✕ Close</button>
       <button type="button" class="video-playback-next" id="video-playback-next" aria-label="Play next episode">⏭ Next Episode</button>
-      <button type="button" class="video-playback-skip-intro" id="video-playback-skip-intro" aria-label="Skip intro">⏩ Skip Intro</button>
       <div id="video-playback-host"></div>`;
     document.body.appendChild(overlay);
     document.getElementById('video-playback-close')?.addEventListener('click', closePlaybackOverlay);
     document.getElementById('video-playback-next')?.addEventListener('click', () => {
       playNextEpisode();
     });
-    document.getElementById('video-playback-skip-intro')?.addEventListener('click', handleSkipIntro);
-    document.getElementById('video-server-switch')?.addEventListener('click', manuallySwitchPlaybackServer);
   }
 }
 
 function updatePlaybackOverlayControls() {
   const nextBtn = document.getElementById('video-playback-next');
-  const skipBtn = document.getElementById('video-playback-skip-intro');
   if (!nextBtn) return;
 
   const isTVPlayback = playbackModalState.mediaType === 'tv' && !!playbackModalState.showId;
@@ -1585,47 +1122,10 @@ function updatePlaybackOverlayControls() {
   nextBtn.classList.toggle('visible', isTVPlayback);
   nextBtn.disabled = !isTVPlayback || !canAdvance;
   nextBtn.textContent = canAdvance ? '⏭ Next Episode' : '⏹ Series Complete';
-
-  if (skipBtn) {
-    const skipAt = Number(playbackModalState.skipIntroTime || 0);
-    const nowAt = Number(playbackModalState.currentPlaybackSeconds || 0);
-    const showSkip = skipAt > 0 && nowAt < skipAt;
-    skipBtn.classList.toggle('visible', showSkip);
-    skipBtn.disabled = !showSkip;
-  }
-}
-
-function handleSkipIntro() {
-  const skipAt = Number(playbackModalState.skipIntroTime || 0);
-  if (skipAt <= 0 || !playbackModalState.contentId) return;
-
-  playbackModalState.currentPlaybackSeconds = skipAt;
-  _persistPlaybackProgressTick();
-
-  const payload = {
-    tmdb_id: String(playbackModalState.contentId),
-    media_type: playbackModalState.mediaType || 'movie',
-    season: playbackModalState.mediaType === 'tv' ? Number(playbackModalState.currentSeasonNumber || 1) : null,
-    episode: playbackModalState.mediaType === 'tv' ? Number(playbackModalState.currentEpisodeNumber || 1) : null,
-    skip_intro_time: skipAt
-  };
-  fetch('/api/skip-intro', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ..._profileHeaders() },
-    body: JSON.stringify(payload)
-  }).catch(() => {});
-
-  if (playbackModalState.currentServerKey === 'vidking') {
-    loadServerAttempt(playbackModalState.currentServerIndex, { reason: 'skip-intro', autoSwitch: false });
-  }
-
-  updatePlaybackOverlayControls();
-  showToast('Skipping intro...');
 }
 
 function openPlaybackOverlay(videoUrl, playbackLabel = 'Starting playback', options = {}) {
-  const hasCandidates = Array.isArray(options.serverCandidates) && options.serverCandidates.length > 0;
-  if (!videoUrl && !hasCandidates) return;
+  if (!videoUrl) return;
   ensurePlaybackOverlay();
   stopWatchHeroTrailer();
 
@@ -1635,44 +1135,25 @@ function openPlaybackOverlay(videoUrl, playbackLabel = 'Starting playback', opti
 
   playbackModalState.isPlaying = true;
   playbackModalState.videoUrl = videoUrl;
-  playbackModalState.contentId = options.contentId || playbackModalState.contentId || null;
-  playbackModalState.contentTitle = options.contentTitle || playbackModalState.contentTitle || '';
-  playbackModalState.contentPoster = options.contentPoster || playbackModalState.contentPoster || '';
   playbackModalState.mediaType = options.mediaType || playbackModalState.mediaType || null;
   playbackModalState.showId = options.showId ?? playbackModalState.showId ?? null;
   playbackModalState.currentSeasonNumber = Number(options.currentSeasonNumber || playbackModalState.currentSeasonNumber || 1);
   playbackModalState.currentEpisodeNumber = Number(options.currentEpisodeNumber || playbackModalState.currentEpisodeNumber || 1);
   playbackModalState.totalEpisodesInSeason = Number(options.totalEpisodesInSeason || playbackModalState.totalEpisodesInSeason || 0);
-  playbackModalState.currentPlaybackSeconds = Math.max(0, Number(options.startSeconds || 0));
-  playbackModalState.durationSeconds = Math.max(0, Number(options.durationSeconds || 0));
-  playbackModalState.skipIntroTime = Math.max(0, Number(options.skipIntroTime || 0));
-  playbackModalState.serverList = hasCandidates ? options.serverCandidates.slice() : [];
   document.body.classList.add('watch-playing');
   updatePlaybackOverlayControls();
 
-  if (hasCandidates) {
-    setPlaybackServerList(options.serverCandidates, options.preferredServerKey || 'vidfast');
-    const initialIndex = Math.max(0, Number(playbackModalState.currentServerIndex || 0));
-    loadServerAttempt(initialIndex, { reason: '', autoSwitch: false });
-  } else {
-    host.innerHTML = `
-      <iframe
-        class="video-playback-frame"
-        src="${videoUrl}"
-        allowfullscreen
-        allow="autoplay; fullscreen; picture-in-picture"
-        referrerpolicy="no-referrer-when-downgrade"
-        title="ToxibhFlix Player">
-      </iframe>`;
-    playbackModalState.currentServerIndex = -1;
-    playbackModalState.currentServerKey = '';
-    playbackModalState.currentServerName = '';
-    updatePlaybackServerUI('');
-  }
-
+  host.innerHTML = `
+    <iframe
+      class="video-playback-frame"
+      src="${videoUrl}"
+      allowfullscreen
+      allow="autoplay; fullscreen; picture-in-picture"
+      referrerpolicy="no-referrer-when-downgrade"
+      title="ToxibhFlix Player">
+    </iframe>`;
   overlay.classList.remove('is-closing');
   overlay.classList.add('is-open');
-  _startProgressHeartbeat();
   showToast(playbackLabel);
 }
 
@@ -1684,7 +1165,6 @@ function closePlaybackOverlay() {
     if (iframe) iframe.src = '';
     host.innerHTML = '';
   }
-  _stopProgressHeartbeat();
   if (overlay) {
     overlay.classList.remove('is-open');
     overlay.classList.add('is-closing');
@@ -1692,31 +1172,15 @@ function closePlaybackOverlay() {
       overlay.classList.remove('is-closing');
     }, 280);
   }
-  if (playbackModalState.activeTimeoutId) {
-    clearTimeout(playbackModalState.activeTimeoutId);
-    playbackModalState.activeTimeoutId = null;
-  }
   playbackModalState.isPlaying = false;
   playbackModalState.videoUrl = '';
-  playbackModalState.contentId = null;
-  playbackModalState.contentTitle = '';
-  playbackModalState.contentPoster = '';
   playbackModalState.mediaType = null;
   playbackModalState.showId = null;
   playbackModalState.currentSeasonNumber = 1;
   playbackModalState.currentEpisodeNumber = 1;
   playbackModalState.totalEpisodesInSeason = 0;
-  playbackModalState.serverList = [];
-  playbackModalState.currentServerIndex = -1;
-  playbackModalState.currentServerKey = '';
-  playbackModalState.currentServerName = '';
-  playbackModalState.activeAttemptToken = null;
-  playbackModalState.currentPlaybackSeconds = 0;
-  playbackModalState.durationSeconds = 0;
-  playbackModalState.skipIntroTime = 0;
   document.body.classList.remove('watch-playing');
   updatePlaybackOverlayControls();
-  updatePlaybackServerUI('');
 }
 
 window.addEventListener('keydown', (event) => {
@@ -2076,7 +1540,14 @@ async function runSearchOverlayQuery(query) {
 
   box.innerHTML = '<div class="search-overlay-empty">Searching...</div>';
   try {
-    const fetchUrl = `/api/tmdb/search?query=${encodeURIComponent(query)}&page=1`;
+    const originalApiUrl = `${TMDB_API_BASE}/search/multi?${new URLSearchParams({
+      api_key: TMDB_API_KEY,
+      language: 'en-US',
+      query,
+      page: '1',
+      include_adult: 'false'
+    }).toString()}`;
+    const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalApiUrl);
     const res = await fetch(fetchUrl);
     if (!res.ok) throw new Error(`Search API ${res.status}`);
     const data = await res.json();
@@ -2092,8 +1563,6 @@ async function runSearchOverlayQuery(query) {
 // ══════════════════════════════════════════════════════════════
 async function initIndexPage() {
   await resolveActiveProfile();
-  loadContinueWatching('row-continue');
-  loadRecentlyWatched('row-recent');
   showThemeLoader('FETCHING MOVIES', 'SYNCING STREAM CATALOG');
   initRowIntersectionObserver();
   // Scroll header behaviour
@@ -2258,10 +1727,9 @@ async function initWatchPage() {
     hideThemeLoader();
   }
 
-  // Resume check from DB-backed progress API.
+  // Resume check — supports both old (cinematic_progress) and new (per-profile) format
   const saved = (await getServerProgress(movieId, 'movie')) || getProgress(movieId);
   const savedSeconds = saved ? (saved.timestamp || saved.seconds || 0) : 0;
-  const savedSkipIntro = saved ? (saved.skipIntroTime || 0) : 0;
   if (savedSeconds > 10) {
     const banner = document.getElementById('resume-banner');
     const label = document.getElementById('resume-time');
@@ -2273,18 +1741,18 @@ async function initWatchPage() {
 
   // Resume button
   document.getElementById('resume-btn')?.addEventListener('click', () => {
-    loadPlayer(movieId, savedSeconds, savedSkipIntro);
+    loadPlayer(movieId, savedSeconds);
     document.getElementById('resume-banner')?.classList.remove('visible');
   });
 
   // Watch button (fresh start)
   document.getElementById('watch-btn')?.addEventListener('click', () => {
-    loadPlayer(movieId, 0, savedSkipIntro);
+    loadPlayer(movieId, 0);
     document.getElementById('resume-banner')?.classList.remove('visible');
   });
 
   document.getElementById('watch-btn-fresh')?.addEventListener('click', () => {
-    loadPlayer(movieId, 0, savedSkipIntro);
+    loadPlayer(movieId, 0);
     document.getElementById('resume-banner')?.classList.remove('visible');
   });
 
@@ -2452,35 +1920,20 @@ function setText(id, val) {
   if (el) el.textContent = val;
 }
 
-async function loadPlayer(movieId, startSeconds = 0, skipIntroTime = 0) {
+function loadPlayer(movieId, startSeconds = 0) {
   stopWatchHeroTrailer();
 
-  const servers = await getStreamServers(movieId, 'movie', 1, 1, startSeconds);
+  let src = `https://www.vidking.net/embed/movie/${movieId}?color=00f5ff&autoPlay=true`;
+  if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
 
-  openPlaybackOverlay('', startSeconds > 5
+  openPlaybackOverlay(src, startSeconds > 5
     ? `▶ Resuming from ${formatTime(startSeconds)}`
     : '▶ Starting playback', {
-    contentId: String(movieId),
-    contentTitle: window._currentMovieTitle || '',
-    contentPoster: window._currentMoviePoster || '',
-    startSeconds,
-    skipIntroTime,
     mediaType: 'movie',
     showId: null,
     currentSeasonNumber: 1,
     currentEpisodeNumber: 1,
-    totalEpisodesInSeason: 0,
-    preferredServerKey: 'vidfast',
-    serverCandidates: servers
-  });
-
-  saveHistoryEvent({
-    tmdb_id: String(movieId),
-    media_type: 'movie',
-    title: window._currentMovieTitle || '',
-    poster_path: window._currentMoviePoster || '',
-    progress_seconds: Math.max(0, Math.floor(Number(startSeconds || 0))),
-    duration_seconds: Math.max(0, Math.floor(Number(playbackModalState.durationSeconds || 0)))
+    totalEpisodesInSeason: 0
   });
 }
 
@@ -2537,39 +1990,9 @@ function loadContinueWatching(containerId) {
 
   (async () => {
     const serverItems = await getServerContinueWatching();
-    const items = serverItems || [];
+    const fallbackItems = getContinueWatching();
+    const items = (serverItems && serverItems.length) ? serverItems : fallbackItems;
 
-    if (!items || items.length === 0) {
-      if (section) section.style.display = 'none';
-      return;
-    }
-
-    if (section) section.style.display = 'block';
-    container.innerHTML = '';
-    items.slice(0, 20).forEach(item => container.appendChild(buildContinueCard(item)));
-  })();
-}
-
-async function getRecentlyWatched() {
-  const p = _getActiveProfile();
-  if (!p?.id) return [];
-  try {
-    const res = await fetch(`/api/recently-watched/${encodeURIComponent(p.id)}`, { headers: _profileHeaders() });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data.items) ? data.items : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function loadRecentlyWatched(containerId) {
-  const section = document.getElementById('row-recent-section');
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  (async () => {
-    const items = await getRecentlyWatched();
     if (!items || items.length === 0) {
       if (section) section.style.display = 'none';
       return;
@@ -2642,13 +2065,8 @@ const allMediaState = {
 };
 
 function buildDiscoverProxyUrl(type, page) {
-  const q = new URLSearchParams({
-    language: 'en-US',
-    sort_by: 'popularity.desc',
-    include_adult: 'false',
-    page: String(page)
-  });
-  return `/api/tmdb/discover/${type}?${q.toString()}`;
+  const originalTMDBUrl = `${TMDB_API_BASE}/discover/${type}?api_key=${TMDB_API_KEY}&language=en-US&sort_by=popularity.desc&include_adult=false`;
+  return "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalTMDBUrl + `&page=${page}`);
 }
 
 async function fetchAllMediaPage(type, page) {
@@ -2754,7 +2172,6 @@ async function initTVPage() {
 
   // Continue watching row
   loadContinueWatching('row-continue');
-  loadRecentlyWatched('row-recent');
 
   initGenres('tv');
   await initAllMediaSection('tv');
@@ -2876,7 +2293,6 @@ async function initWatchTVPage() {
 
   // Check existing resume data
   const saved = (await getServerProgress(showId, 'tv')) || getProgress(showId);
-  const savedSkipIntro = saved ? (saved.skipIntroTime || 0) : 0;
   if (saved && saved.mediaType === 'tv' && saved.timestamp > 10 && !params.get('s')) {
     defaultSeason  = saved.season  || 1;
     defaultEpisode = saved.episode || 1;
@@ -2941,20 +2357,20 @@ async function initWatchTVPage() {
   // Resume button
   document.getElementById('resume-btn')?.addEventListener('click', () => {
     const ts = saved ? (saved.timestamp || 0) : 0;
-    loadTVPlayer(showId, saved?.season || 1, saved?.episode || 1, ts, savedSkipIntro);
+    loadTVPlayer(showId, saved?.season || 1, saved?.episode || 1, ts);
     document.getElementById('resume-banner')?.classList.remove('visible');
   });
 
   // Fresh start button
   document.getElementById('watch-btn-fresh')?.addEventListener('click', () => {
-    loadTVPlayer(showId, defaultSeason, defaultEpisode, 0, savedSkipIntro);
+    loadTVPlayer(showId, defaultSeason, defaultEpisode, 0);
     document.getElementById('resume-banner')?.classList.remove('visible');
   });
 
   // Main watch button
   document.getElementById('watch-btn')?.addEventListener('click', () => {
     const ts = (shouldResume && saved && saved.timestamp > 10) ? saved.timestamp : 0;
-    loadTVPlayer(showId, window._currentSeason, window._currentEpisode, ts, savedSkipIntro);
+    loadTVPlayer(showId, window._currentSeason, window._currentEpisode, ts);
     document.getElementById('resume-banner')?.classList.remove('visible');
   });
 
@@ -3157,7 +2573,12 @@ function renderSeasonTabs(seasons, showId, activeSeason) {
 }
 
 async function fetchSeasonEpisodesViaProxy(showId, seasonNum) {
-  const fetchUrl = `/api/tmdb/tv/${encodeURIComponent(showId)}/season/${encodeURIComponent(seasonNum)}`;
+  const params = new URLSearchParams({
+    api_key: TMDB_API_KEY,
+    language: 'en-US'
+  });
+  const originalTMDBApiUrl = `${TMDB_API_BASE}/tv/${showId}/season/${seasonNum}?${params.toString()}`;
+  const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalTMDBApiUrl);
 
   const res = await fetch(fetchUrl);
   if (!res.ok) throw new Error(`Season API ${res.status}`);
@@ -3270,7 +2691,7 @@ async function fetchAndRenderEpisodes(showId, seasonNum, activeEpisode) {
   }
 }
 
-async function loadTVPlayer(showId, season, episode, startSeconds = 0, skipIntroTime = 0) {
+function loadTVPlayer(showId, season, episode, startSeconds = 0) {
   stopWatchHeroTrailer();
 
   window._currentShowId  = showId;
@@ -3288,34 +2709,17 @@ async function loadTVPlayer(showId, season, episode, startSeconds = 0, skipIntro
   playbackModalState.currentEpisodeNumber = episode;
   playbackModalState.totalEpisodesInSeason = Number(window._episodeState?.totalEpisodesInSeason || (window._episodeState?.episodes || []).length || 0);
 
-  const servers = await getStreamServers(showId, 'tv', season, episode, startSeconds);
+  let src = `https://www.vidking.net/embed/tv/${showId}/${season}/${episode}?color=00f5ff&autoPlay=true`;
+  if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
 
-  openPlaybackOverlay('', startSeconds > 5
+  openPlaybackOverlay(src, startSeconds > 5
     ? `▶ Resuming S${season}E${episode} from ${formatTime(startSeconds)}`
     : `▶ Playing S${season}E${episode}`, {
-    contentId: String(showId),
-    contentTitle: window._currentShowTitle || '',
-    contentPoster: window._currentShowPoster || '',
-    startSeconds,
-    skipIntroTime,
     mediaType: 'tv',
     showId,
     currentSeasonNumber: season,
     currentEpisodeNumber: episode,
-    totalEpisodesInSeason: playbackModalState.totalEpisodesInSeason,
-    preferredServerKey: 'vidfast',
-    serverCandidates: servers
-  });
-
-  saveHistoryEvent({
-    tmdb_id: String(showId),
-    media_type: 'tv',
-    season: Number(season || 1),
-    episode: Number(episode || 1),
-    title: window._currentShowTitle || '',
-    poster_path: window._currentShowPoster || '',
-    progress_seconds: Math.max(0, Math.floor(Number(startSeconds || 0))),
-    duration_seconds: Math.max(0, Math.floor(Number(playbackModalState.durationSeconds || 0)))
+    totalEpisodesInSeason: playbackModalState.totalEpisodesInSeason
   });
 }
 

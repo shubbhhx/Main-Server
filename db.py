@@ -2,7 +2,6 @@ import os
 import re
 import sqlite3
 import bcrypt
-import uuid
 from datetime import datetime
 
 def _is_writable_dir(path):
@@ -41,7 +40,7 @@ FLIX_DB_PATH = os.path.join(DB_DIR, 'flix.db')
 ANALYTICS_DB_PATH = os.path.join(DB_DIR, 'analytics.db')
 
 DEFAULT_MOVIE_PROFILES = [
-    ('guest', 'local_user', 'Guest', '/static/avatars/avatar1.png'),
+    ('guest', 'local_user', 'Guest', '👤'),
 ]
 
 LEGACY_DUMMY_PROFILE_IDS = [
@@ -75,7 +74,6 @@ TABLE_TO_DB = {
     'resume_progress': 'flix',
     'watchlist': 'flix',
     'downloaded_torrents': 'flix',
-    'watch_progress': 'flix',
 
     'daily_visitors': 'analytics',
     'request_logs': 'analytics',
@@ -270,15 +268,6 @@ def _init_flix_db():
     conn = get_db('flix')
     c = conn.cursor()
 
-    def _table_columns(table_name):
-        c.execute(f'PRAGMA table_info({table_name})')
-        return {row[1] for row in c.fetchall()}
-
-    def _add_column_if_missing(table_name, column_name, ddl):
-        cols = _table_columns(table_name)
-        if column_name not in cols:
-            c.execute(f'ALTER TABLE {table_name} ADD COLUMN {ddl}')
-
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -293,89 +282,11 @@ def _init_flix_db():
             user_id TEXT NOT NULL,
             profile_name TEXT NOT NULL,
             avatar TEXT,
-            avatar_url TEXT,
             created_at TEXT NOT NULL,
             UNIQUE(user_id, profile_name),
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
-
-    _add_column_if_missing('profiles', 'is_default', 'is_default INTEGER NOT NULL DEFAULT 0')
-    _add_column_if_missing('profiles', 'avatar_url', 'avatar_url TEXT')
-
-    # Remove duplicate profiles by normalized name while preserving one canonical row.
-    dup_rows = c.execute('''
-        SELECT lower(trim(profile_name)) AS normalized_name, COUNT(*) AS cnt
-        FROM profiles
-        WHERE user_id = ?
-        GROUP BY normalized_name
-        HAVING cnt > 1
-    ''', ('local_user',)).fetchall()
-
-    for dup in dup_rows:
-        norm_name = dup[0]
-        rows = c.execute('''
-            SELECT id, profile_name, created_at, COALESCE(is_default, 0) AS is_default
-            FROM profiles
-            WHERE user_id = ? AND lower(trim(profile_name)) = ?
-            ORDER BY is_default DESC, created_at ASC, id ASC
-        ''', ('local_user', norm_name)).fetchall()
-        if not rows:
-            continue
-
-        keep_id = rows[0][0]
-        for stale in rows[1:]:
-            stale_id = stale[0]
-            c.execute('UPDATE watch_history SET profile_id = ? WHERE profile_id = ?', (keep_id, stale_id))
-            c.execute('UPDATE resume_progress SET profile_id = ? WHERE profile_id = ?', (keep_id, stale_id))
-            c.execute('UPDATE watchlist SET profile_id = ? WHERE profile_id = ?', (keep_id, stale_id))
-            c.execute('DELETE FROM profiles WHERE id = ?', (stale_id,))
-
-    # Guarantee the default Guest profile exists exactly once.
-    now = datetime.utcnow().isoformat()
-    c.execute(
-        '''
-        INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, avatar_url, created_at, is_default)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''',
-        ('guest', 'local_user', 'Guest', '/static/avatars/avatar1.png', '/static/avatars/avatar1.png', now, 1)
-    )
-
-    c.execute('''
-        UPDATE profiles
-        SET avatar_url = CASE
-            WHEN avatar_url IS NOT NULL AND trim(avatar_url) <> '' THEN avatar_url
-            WHEN avatar IS NOT NULL AND trim(avatar) <> '' AND substr(trim(avatar), 1, 1) = '/' THEN avatar
-            ELSE '/static/avatars/avatar1.png'
-        END
-        WHERE avatar_url IS NULL OR trim(avatar_url) = ''
-    ''')
-
-    # Choose one and only one default profile.
-    default_row = c.execute('''
-        SELECT id
-        FROM profiles
-        WHERE user_id = ? AND lower(trim(profile_name)) = lower(?)
-        ORDER BY created_at ASC, id ASC
-        LIMIT 1
-    ''', ('local_user', 'Guest')).fetchone()
-
-    if not default_row:
-        default_row = c.execute('''
-            SELECT id
-            FROM profiles
-            WHERE user_id = ?
-            ORDER BY created_at ASC, id ASC
-            LIMIT 1
-        ''', ('local_user',)).fetchone()
-
-    c.execute('UPDATE profiles SET is_default = 0 WHERE user_id = ?', ('local_user',))
-    if default_row:
-        c.execute('UPDATE profiles SET is_default = 1 WHERE id = ?', (default_row[0],))
-
-    # Enforce uniqueness and single default profile at DB layer.
-    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_user_name_unique ON profiles(user_id, lower(trim(profile_name)))')
-    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_single_default ON profiles(is_default) WHERE is_default = 1')
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS watch_history (
@@ -433,66 +344,6 @@ def _init_flix_db():
         )
     ''')
 
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS watch_progress (
-            id TEXT PRIMARY KEY,
-            profile_id TEXT NOT NULL,
-            tmdb_id TEXT NOT NULL,
-            media_type TEXT NOT NULL,
-            title TEXT,
-            poster_path TEXT,
-            season INTEGER,
-            episode INTEGER,
-            progress_seconds INTEGER NOT NULL DEFAULT 0,
-            duration_seconds INTEGER NOT NULL DEFAULT 0,
-            last_watched TEXT NOT NULL,
-            completed INTEGER NOT NULL DEFAULT 0,
-            server_used TEXT,
-            skip_intro_time INTEGER,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (profile_id) REFERENCES profiles(id)
-        )
-    ''')
-
-    _add_column_if_missing('watch_progress', 'title', 'title TEXT')
-    _add_column_if_missing('watch_progress', 'poster_path', 'poster_path TEXT')
-
-    c.execute('''
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_progress_identity
-        ON watch_progress(profile_id, tmdb_id, media_type, COALESCE(season, -1), COALESCE(episode, -1))
-    ''')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_watch_progress_last_watched ON watch_progress(profile_id, last_watched DESC)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_watch_progress_continue ON watch_progress(profile_id, completed, updated_at DESC)')
-
-    # Extend legacy watch_history table for Netflix-style history APIs.
-    _add_column_if_missing('watch_history', 'tmdb_id', 'tmdb_id TEXT')
-    _add_column_if_missing('watch_history', 'media_type', 'media_type TEXT')
-    _add_column_if_missing('watch_history', 'title', 'title TEXT')
-    _add_column_if_missing('watch_history', 'poster_path', 'poster_path TEXT')
-    _add_column_if_missing('watch_history', 'season', 'season INTEGER')
-    _add_column_if_missing('watch_history', 'episode', 'episode INTEGER')
-    _add_column_if_missing('watch_history', 'watched_at', 'watched_at TEXT')
-    _add_column_if_missing('watch_history', 'progress_seconds', 'progress_seconds INTEGER DEFAULT 0')
-    _add_column_if_missing('watch_history', 'duration_seconds', 'duration_seconds INTEGER DEFAULT 0')
-
-    c.execute('''
-        UPDATE watch_history
-        SET tmdb_id = COALESCE(tmdb_id, content_id),
-            media_type = COALESCE(media_type, content_type),
-            watched_at = COALESCE(watched_at, last_watched),
-            duration_seconds = CASE
-                WHEN duration_seconds IS NULL OR duration_seconds = 0 THEN COALESCE(duration, 0)
-                ELSE duration_seconds
-            END,
-            progress_seconds = CASE
-                WHEN progress_seconds IS NULL OR progress_seconds = 0 THEN COALESCE(timestamp, 0)
-                ELSE progress_seconds
-            END
-        WHERE tmdb_id IS NULL OR media_type IS NULL OR watched_at IS NULL OR progress_seconds IS NULL
-    ''')
-
-    c.execute('CREATE INDEX IF NOT EXISTS idx_watch_history_recent ON watch_history(profile_id, watched_at DESC)')
-
     c.execute('CREATE INDEX IF NOT EXISTS idx_watch_history_profile_time ON watch_history(profile_id, last_watched DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_resume_profile_updated ON resume_progress(profile_id, updated_at DESC)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_profile_added ON watchlist(profile_id, added_at DESC)')
@@ -522,11 +373,11 @@ def _init_flix_db():
         ('local_user', 'Local User', now)
     )
 
-    for profile_id, user_id, profile_name, avatar_url in DEFAULT_MOVIE_PROFILES:
+    for profile_id, user_id, profile_name, avatar in DEFAULT_MOVIE_PROFILES:
         c.execute('''
-            INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, avatar_url, created_at, is_default)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (profile_id, user_id, profile_name, avatar_url, avatar_url, now, 1 if profile_id == 'guest' else 0))
+            INSERT OR IGNORE INTO profiles (id, user_id, profile_name, avatar, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (profile_id, user_id, profile_name, avatar, now))
 
     for legacy_profile_id in LEGACY_DUMMY_PROFILE_IDS:
         c.execute('DELETE FROM watch_history WHERE profile_id = ?', (legacy_profile_id,))
