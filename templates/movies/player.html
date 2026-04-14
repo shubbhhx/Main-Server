@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ToxibhFlix - Streaming Player</title>
+  <meta name="description" content="Minimal neon OTT player for movies and TV shows.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #05070d;
+      --card: rgba(8, 12, 22, 0.88);
+      --line: rgba(0, 240, 255, 0.25);
+      --line-soft: rgba(0, 240, 255, 0.14);
+      --text: #ffffff;
+      --muted: #9db0c8;
+      --accent: #00f0ff;
+      --radius: 14px;
+      --glow: 0 0 18px rgba(0, 240, 255, 0.24);
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 18px;
+      background:
+        radial-gradient(1000px 520px at -5% -15%, rgba(0, 240, 255, 0.14), transparent 65%),
+        radial-gradient(900px 500px at 105% 110%, rgba(55, 169, 255, 0.18), transparent 70%),
+        var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    .stage {
+      width: min(1450px, 100%);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .topbar {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(8, 12, 22, 0.62);
+      box-shadow: var(--glow);
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title {
+      margin: 0;
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(20px, 2.4vw, 30px);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .subtitle {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .actions { display: flex; gap: 8px; }
+
+    .btn,
+    .server-btn,
+    .season-select {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(8, 12, 20, 0.86);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+
+    .btn {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .server-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .season-select {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      width: 100%;
+      outline: none;
+    }
+
+    .btn:hover,
+    .server-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(0, 240, 255, 0.78);
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.24);
+    }
+
+    .server-btn.active {
+      color: #001117;
+      border-color: rgba(0, 240, 255, 0.95);
+      background: linear-gradient(135deg, #00f0ff, #7df7ff);
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.34);
+    }
+
+    .workspace {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(155deg, rgba(15, 23, 38, 0.72), rgba(8, 12, 22, 0.9));
+      box-shadow: var(--shadow), var(--glow);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .workspace.tv-layout {
+      grid-template-columns: minmax(0, 1fr) 360px;
+    }
+
+    .player-zone {
+      min-width: 0;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    #videoFrame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      opacity: 0;
+      transform: scale(1.01);
+      transition: opacity .34s ease, transform .34s ease;
+    }
+
+    #videoFrame.ready {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.58);
+      z-index: 3;
+    }
+
+    .overlay.visible { display: flex; }
+
+    .spinner {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--accent);
+      animation: spin 0.9s linear infinite;
+      margin: 0 auto 12px;
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.24);
+    }
+
+    .overlay-text {
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .overlay-sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .server-row {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: rgba(7, 12, 20, 0.62);
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .episodes-zone {
+      border-left: 1px solid var(--line-soft);
+      padding: 12px;
+      display: none;
+      flex-direction: column;
+      min-height: 0;
+      gap: 10px;
+      background: linear-gradient(180deg, rgba(10, 15, 28, 0.84), rgba(7, 10, 18, 0.92));
+    }
+
+    .workspace.tv-layout .episodes-zone {
+      display: flex;
+    }
+
+    .episodes-head {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: rgba(7, 12, 20, 0.62);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .episodes-title {
+      margin: 0;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #a8f6ff;
+    }
+
+    .episodes-sub {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .episodes-body {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: rgba(7, 12, 20, 0.62);
+      padding: 8px;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 240, 255, 0.45) rgba(255, 255, 255, 0.08);
+    }
+
+    .episodes-body::-webkit-scrollbar { width: 6px; }
+    .episodes-body::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.06); border-radius: 8px; }
+    .episodes-body::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.45); border-radius: 8px; }
+
+    .episodes-empty {
+      min-height: 110px;
+      border: 1px dashed rgba(0, 240, 255, 0.2);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 10px;
+    }
+
+    .episode-item {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 10px;
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 240, 255, 0.18);
+      background: rgba(8, 12, 22, 0.84);
+      padding: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+
+    .episode-item:hover {
+      transform: translateY(-1px);
+      border-color: rgba(0, 240, 255, 0.72);
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+    }
+
+    .episode-item.active {
+      border-color: rgba(0, 240, 255, 0.95);
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.26);
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.12), rgba(11, 15, 26, 0.9));
+    }
+
+    .episode-thumb {
+      width: 100%;
+      height: 62px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    .episode-meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      text-align: left;
+    }
+
+    .episode-number {
+      color: #8ee7ff;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .episode-name {
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .episode-runtime {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 1080px) {
+      .workspace.tv-layout { grid-template-columns: 1fr; }
+      .episodes-zone { border-left: none; border-top: 1px solid var(--line-soft); }
+    }
+
+    @media (max-width: 800px) {
+      body { padding: 12px; }
+      .topbar { grid-template-columns: 1fr; }
+      .actions { justify-content: flex-start; }
+      .episode-item { grid-template-columns: 92px 1fr; }
+      .episode-thumb { height: 56px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <header class="topbar">
+      <button id="backBtn" class="btn" type="button">Back</button>
+      <div>
+        <h1 class="title" id="watchingTitle">Loading title...</h1>
+        <div id="serverSubtitle" class="subtitle">Initializing...</div>
+      </div>
+      <div class="actions">
+        <button id="retryBtn" class="btn" type="button">Retry</button>
+        <button id="nextBtn" class="btn" type="button">Next Server</button>
+      </div>
+    </header>
+
+    <section class="workspace" id="workspace">
+      <section class="player-zone" id="playerZone">
+        <div id="frameWrap" class="player-wrapper">
+          <iframe id="videoFrame" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" title="Streaming Player"></iframe>
+          <div id="loadingOverlay" class="overlay visible">
+            <div>
+              <div class="spinner"></div>
+              <div class="overlay-text">Loading stream...</div>
+              <div id="overlaySub" class="overlay-sub">Connecting to server</div>
+            </div>
+          </div>
+          <div id="errorOverlay" class="overlay">
+            <div>
+              <div class="overlay-text">Server failed, switching...</div>
+              <div class="overlay-sub">Trying the next provider</div>
+            </div>
+          </div>
+        </div>
+        <div class="server-row" id="serverList"></div>
+      </section>
+
+      <aside class="episodes-zone" id="episodesZone">
+        <div class="episodes-head">
+          <h2 class="episodes-title">Episode List</h2>
+          <div class="episodes-sub" id="episodesSubtitle">Loading show details...</div>
+          <select id="seasonSelect" class="season-select" aria-label="Select season"></select>
+        </div>
+        <div class="episodes-body" id="episodesBody">
+          <div id="tvEpisodesList">
+            <div class="episodes-empty">Loading episodes...</div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const TMDB_WORKER_BASE = 'https://snowy-bush-2e58.subhamj422.workers.dev';
+    const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
+    const FALLBACK_STILL = '/static/img/no-poster.png';
+
+    const VIDEO_SERVERS = [
+      {
+        name: 'VidFast Pro',
+        primary: true,
+        url: (id, type, s, e) => type === 'movie' ? `https://vidfast.pro/movie/${id}` : `https://vidfast.pro/tv/${id}/${s}/${e}`
+      },
+      {
+        name: 'VidSrc',
+        url: (id, type, s, e) => type === 'movie' ? `https://vidsrc.xyz/embed/movie/${id}` : `https://vidsrc.xyz/embed/tv/${id}/${s}/${e}`
+      },
+      { name: '2Embed', url: (id) => `https://2embed.cc/embed/${id}` },
+      { name: 'MultiEmbed', url: (id) => `https://multiembed.mov/?video_id=${id}` }
+    ];
+
+    const LOAD_TIMEOUT_MS = 12000;
+    const STORAGE_KEY = 'toxibhflix_player_server';
+
+    const state = {
+      type: 'movie',
+      id: '',
+      season: 1,
+      episode: 1,
+      startSeconds: 0,
+      title: '',
+      activeIndex: 0,
+      timeoutId: null,
+      tried: new Set(),
+      seasons: [],
+      episodes: []
+    };
+
+    const els = {
+      workspace: document.getElementById('workspace'),
+      frame: document.getElementById('videoFrame'),
+      frameWrap: document.getElementById('frameWrap'),
+      loadingOverlay: document.getElementById('loadingOverlay'),
+      errorOverlay: document.getElementById('errorOverlay'),
+      overlaySub: document.getElementById('overlaySub'),
+      subtitle: document.getElementById('serverSubtitle'),
+      title: document.getElementById('watchingTitle'),
+      serverList: document.getElementById('serverList'),
+      retryBtn: document.getElementById('retryBtn'),
+      nextBtn: document.getElementById('nextBtn'),
+      backBtn: document.getElementById('backBtn'),
+      episodesZone: document.getElementById('episodesZone'),
+      episodesSubtitle: document.getElementById('episodesSubtitle'),
+      seasonSelect: document.getElementById('seasonSelect'),
+      tvEpisodesList: document.getElementById('tvEpisodesList')
+    };
+
+    function parseParams() {
+      const params = new URLSearchParams(window.location.search);
+      const type = (params.get('type') || 'movie').toLowerCase();
+      state.type = type === 'tv' ? 'tv' : 'movie';
+      state.id = (params.get('id') || '').trim();
+      state.season = Math.max(1, Number(params.get('season') || 1));
+      state.episode = Math.max(1, Number(params.get('episode') || 1));
+      state.startSeconds = Math.max(0, Number(params.get('start') || 0));
+      const rawTitle = (params.get('title') || '').trim();
+      state.title = rawTitle || (state.type === 'tv' ? `TV Show #${state.id} S${state.season}E${state.episode}` : `Movie #${state.id}`);
+    }
+
+    function getPrimaryServerIndex() {
+      const idx = VIDEO_SERVERS.findIndex((s) => s.primary);
+      return idx >= 0 ? idx : 0;
+    }
+
+    function getPreferredServerIndex() {
+      const saved = localStorage.getItem(STORAGE_KEY) || '';
+      const idx = VIDEO_SERVERS.findIndex((s) => s.name === saved);
+      return idx >= 0 ? idx : getPrimaryServerIndex();
+    }
+
+    function setStatus(msg) {
+      els.subtitle.textContent = msg;
+      els.overlaySub.textContent = msg;
+    }
+
+    function showLoading(show) {
+      els.loadingOverlay.classList.toggle('visible', !!show);
+    }
+
+    function showError(show) {
+      els.errorOverlay.classList.toggle('visible', !!show);
+    }
+
+    function clearLoadTimeout() {
+      if (state.timeoutId) {
+        clearTimeout(state.timeoutId);
+        state.timeoutId = null;
+      }
+    }
+
+    function withProgress(url, sec) {
+      if (!sec || sec <= 5) return url;
+      const joiner = url.includes('?') ? '&' : '?';
+      return `${url}${joiner}progress=${Math.floor(sec)}`;
+    }
+
+    function serverUrl(server) {
+      const base = server.url(state.id, state.type, state.season, state.episode);
+      return withProgress(base, state.startSeconds);
+    }
+
+    function setActiveServerButton() {
+      els.serverList.querySelectorAll('.server-btn').forEach((btn) => {
+        btn.classList.toggle('active', Number(btn.dataset.index) === state.activeIndex);
+      });
+    }
+
+    function renderServerButtons() {
+      els.serverList.innerHTML = '';
+      VIDEO_SERVERS.forEach((server, index) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'server-btn';
+        btn.dataset.index = String(index);
+        btn.textContent = server.name;
+        btn.addEventListener('click', () => {
+          state.tried = new Set([index]);
+          loadServer(index, true);
+        });
+        els.serverList.appendChild(btn);
+      });
+      setActiveServerButton();
+    }
+
+    function scheduleFailover(fromIndex) {
+      clearLoadTimeout();
+      state.timeoutId = setTimeout(() => {
+        showLoading(false);
+        showError(true);
+        setStatus('Server timeout, switching...');
+        tryNextServer(fromIndex + 1);
+      }, LOAD_TIMEOUT_MS);
+    }
+
+    function loadServer(index, manual) {
+      const server = VIDEO_SERVERS[index];
+      if (!server) return;
+
+      state.activeIndex = index;
+      setActiveServerButton();
+
+      const url = serverUrl(server);
+      els.frame.classList.remove('ready');
+      showError(false);
+      showLoading(true);
+      setStatus(`${server.name.toUpperCase()} CONNECTING`);
+
+      scheduleFailover(index);
+
+      setTimeout(() => {
+        els.frame.src = url;
+      }, 130);
+
+      els.frame.onload = () => {
+        clearLoadTimeout();
+        showError(false);
+        showLoading(false);
+        setStatus(`${server.name.toUpperCase()} CONNECTED`);
+        els.frame.classList.add('ready');
+        localStorage.setItem(STORAGE_KEY, server.name);
+      };
+
+      els.frame.onerror = () => {
+        clearLoadTimeout();
+        showLoading(false);
+        showError(true);
+        setStatus('Server failed, switching...');
+        tryNextServer(index + 1);
+      };
+
+      if (manual) state.tried = new Set([index]);
+    }
+
+    function tryNextServer(nextIndex) {
+      for (let i = nextIndex; i < VIDEO_SERVERS.length; i += 1) {
+        if (!state.tried.has(i)) {
+          state.tried.add(i);
+          loadServer(i, false);
+          return;
+        }
+      }
+
+      showLoading(false);
+      showError(true);
+      setStatus('All servers failed. Use Retry or choose a server.');
+    }
+
+    async function fetchFromWorker(endpoint) {
+      const clean = String(endpoint || '').replace(/^\/+/, '');
+      const url = `${TMDB_WORKER_BASE}/${clean}${clean.includes('?') ? '' : '?language=en-US'}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`TMDB ${res.status}`);
+      return res.json();
+    }
+
+    function stillUrl(path) {
+      if (!path) return FALLBACK_STILL;
+      const clean = path.startsWith('/') ? path : `/${path}`;
+      return `${TMDB_IMAGE_BASE}/w300${clean}`;
+    }
+
+    function updatePlayerTitle() {
+      if (state.type === 'tv') {
+        els.title.textContent = `${state.title} S${state.season}E${state.episode}`;
+      } else {
+        els.title.textContent = state.title;
+      }
+    }
+
+    function renderEpisodeList() {
+      const episodes = state.episodes || [];
+      if (!episodes.length) {
+        els.tvEpisodesList.innerHTML = '<div class="episodes-empty">No episodes found for this season</div>';
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      els.tvEpisodesList.innerHTML = '';
+
+      episodes.forEach((ep) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'episode-item';
+        if (Number(ep.episode_number) === Number(state.episode)) btn.classList.add('active');
+
+        const name = (ep.name || `Episode ${ep.episode_number}`).trim();
+        const runtime = ep.runtime ? `${ep.runtime} min` : 'Runtime N/A';
+
+        btn.innerHTML = `
+          <img class="episode-thumb" src="${stillUrl(ep.still_path)}" alt="${String(name).replace(/"/g, '&quot;')}" loading="lazy" onerror="this.onerror=null;this.src='${FALLBACK_STILL}'">
+          <div class="episode-meta">
+            <div class="episode-number">Ep ${ep.episode_number}</div>
+            <div class="episode-name">${name}</div>
+            <div class="episode-runtime">${runtime}</div>
+          </div>`;
+
+        btn.addEventListener('click', () => {
+          state.episode = Number(ep.episode_number) || 1;
+          state.startSeconds = 0;
+          renderEpisodeList();
+          updatePlayerTitle();
+          state.tried = new Set([getPrimaryServerIndex()]);
+          loadServer(getPrimaryServerIndex(), false);
+        });
+
+        frag.appendChild(btn);
+      });
+
+      els.tvEpisodesList.appendChild(frag);
+    }
+
+    function renderSeasonOptions() {
+      const seasons = state.seasons || [];
+      els.seasonSelect.innerHTML = '';
+      seasons.forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = String(s.season_number || 1);
+        opt.textContent = s.name || `Season ${s.season_number}`;
+        if (Number(opt.value) === Number(state.season)) opt.selected = true;
+        els.seasonSelect.appendChild(opt);
+      });
+    }
+
+    async function loadSeason(seasonNumber) {
+      state.season = Number(seasonNumber) || 1;
+      els.tvEpisodesList.innerHTML = '<div class="episodes-empty">Loading episodes...</div>';
+
+      try {
+        const season = await fetchFromWorker(`tv/${state.id}/season/${state.season}?language=en-US`);
+        state.episodes = Array.isArray(season.episodes) ? season.episodes : [];
+        const validEpisode = state.episodes.some((ep) => Number(ep.episode_number) === Number(state.episode));
+        if (!validEpisode) {
+          state.episode = state.episodes.length ? Number(state.episodes[0].episode_number) : 1;
+        }
+        renderEpisodeList();
+        updatePlayerTitle();
+      } catch (err) {
+        console.error(err);
+        els.tvEpisodesList.innerHTML = '<div class="episodes-empty">Failed to load episodes</div>';
+      }
+    }
+
+    async function initTvPanel() {
+      els.workspace.classList.add('tv-layout');
+      els.episodesZone.style.display = 'flex';
+
+      try {
+        const show = await fetchFromWorker(`tv/${state.id}?language=en-US`);
+        if (!window.location.search.includes('title=')) {
+          state.title = show.name || show.original_name || state.title;
+        }
+
+        state.seasons = (show.seasons || []).filter((s) => Number(s.season_number) > 0);
+        if (!state.seasons.length && show.number_of_seasons) {
+          for (let i = 1; i <= Number(show.number_of_seasons); i += 1) {
+            state.seasons.push({ season_number: i, name: `Season ${i}` });
+          }
+        }
+
+        const seasonExists = state.seasons.some((s) => Number(s.season_number) === Number(state.season));
+        if (!seasonExists && state.seasons.length) {
+          state.season = Number(state.seasons[0].season_number);
+        }
+
+        els.episodesSubtitle.textContent = `${state.title} - choose season and episode`;
+        renderSeasonOptions();
+        await loadSeason(state.season);
+      } catch (err) {
+        console.error(err);
+        els.episodesSubtitle.textContent = 'Failed to load TV metadata';
+        els.tvEpisodesList.innerHTML = '<div class="episodes-empty">Unable to load TV details</div>';
+      }
+    }
+
+    function initMovieMode() {
+      els.workspace.classList.remove('tv-layout');
+      els.episodesZone.style.display = 'none';
+    }
+
+    function initActions() {
+      els.retryBtn.addEventListener('click', () => {
+        if (!state.id) return;
+        setStatus('Retrying current server...');
+        loadServer(state.activeIndex, true);
+      });
+
+      els.nextBtn.addEventListener('click', () => {
+        if (!state.id) return;
+        const next = (state.activeIndex + 1) % VIDEO_SERVERS.length;
+        setStatus('Switching server...');
+        loadServer(next, true);
+      });
+
+      els.backBtn.addEventListener('click', () => {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.href = '/movies/browse';
+        }
+      });
+
+      els.seasonSelect.addEventListener('change', async (e) => {
+        state.startSeconds = 0;
+        await loadSeason(Number(e.target.value));
+        state.tried = new Set([getPrimaryServerIndex()]);
+        loadServer(getPrimaryServerIndex(), false);
+      });
+    }
+
+    async function boot() {
+      parseParams();
+      initActions();
+      renderServerButtons();
+
+      if (!state.id) {
+        showLoading(false);
+        showError(true);
+        els.title.textContent = 'Invalid playback request';
+        setStatus('Missing id parameter');
+        return;
+      }
+
+      if (state.type === 'tv') {
+        await initTvPanel();
+      } else {
+        initMovieMode();
+      }
+
+      updatePlayerTitle();
+      const preferred = getPreferredServerIndex();
+      state.tried = new Set([preferred]);
+      loadServer(preferred, false);
+    }
+
+    boot();
+  </script>
+</body>
+</html>

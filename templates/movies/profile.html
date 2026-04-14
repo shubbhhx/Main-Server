@@ -45,6 +45,13 @@
     border: 1px solid rgba(0,245,255,0.35);
     box-shadow: 0 0 10px rgba(0,245,255,0.2);
     flex-shrink: 0;
+    overflow: hidden;
+  }
+  .profile-hero-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
   .profile-hero-text {
     min-width: 0;
@@ -253,10 +260,18 @@
 <div id="toast"></div>
 <script src="/movies/script.js?v=5"></script>
 <script>
-  const DASH_TMDB_API_BASE = 'https://api.themoviedb.org/3';
-  const DASH_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4';
-  const DASH_WORKER = 'https://snowy-bush-2e58.subhamj422.workers.dev/';
+  const DASH_WORKER = 'https://snowy-bush-2e58.subhamj422.workers.dev';
   const DASH_FALLBACK_POSTER = '/static/img/no-poster.png';
+
+  async function fetchFromAPI(endpoint) {
+    const cleanEndpoint = String(endpoint || '').replace(/^\/+/, '');
+    const url = `${DASH_WORKER}/${cleanEndpoint}`;
+    // Debug: example call -> /trending/all/week, /movie/123/recommendations?page=1
+    console.debug('[DASH Worker] GET', url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json();
+  }
 
   function _dashActiveProfile() {
     return JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
@@ -315,11 +330,7 @@
     wishlistItems.slice(0, 8).forEach(i => pushSeed(i.content_id, i.content_type));
 
     if (!seeds.length) {
-      const originalApiUrl = `${DASH_TMDB_API_BASE}/trending/all/week?${new URLSearchParams({ api_key: DASH_TMDB_KEY, language: 'en-US' }).toString()}`;
-      const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalApiUrl);
-      const res = await fetch(fetchUrl);
-      if (!res.ok) return [];
-      const data = await res.json();
+      const data = await fetchFromAPI('trending/all/week?language=en-US');
       return (data.results || []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 18);
     }
 
@@ -327,12 +338,9 @@
     const merged = [];
 
     for (const seed of seeds.slice(0, 4)) {
-      const endpoint = `${DASH_TMDB_API_BASE}/${seed.type}/${seed.id}/recommendations?${new URLSearchParams({ api_key: DASH_TMDB_KEY, language: 'en-US', page: '1' }).toString()}`;
-      const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(endpoint);
+      const endpoint = `${seed.type}/${seed.id}/recommendations?language=en-US&page=1`;
       try {
-        const res = await fetch(fetchUrl);
-        if (!res.ok) continue;
-        const data = await res.json();
+        const data = await fetchFromAPI(endpoint);
         (data.results || []).forEach(item => {
           const type = seed.type;
           const key = `${type}:${item.id}`;
@@ -415,6 +423,7 @@
       const p = _dashActiveProfile();
       const name = (p && p.name) ? p.name : 'Guest';
       const emoji = (p && p.emoji) ? p.emoji : '👤';
+      const profileImage = (p && p.profile_image) ? p.profile_image : '';
       const nameEl = document.getElementById('profile-name-display');
       const titleEl = document.getElementById('dash-title');
       const heroNameEl = document.getElementById('dash-hero-name');
@@ -422,7 +431,13 @@
       if (nameEl) nameEl.textContent = name;
       if (titleEl) titleEl.textContent = `${name} Dashboard`;
       if (heroNameEl) heroNameEl.textContent = name;
-      if (avatarEl) avatarEl.textContent = emoji;
+      if (avatarEl) {
+        if (profileImage) {
+          avatarEl.innerHTML = `<img src="${String(profileImage).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;')}" alt="${String(name).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;')}">`;
+        } else {
+          avatarEl.textContent = emoji;
+        }
+      }
 
       const [resumeItems, wishlistItems] = await Promise.all([
         fetchLocalContinue(),

@@ -7,9 +7,7 @@
 const TMDB_IMAGE_ORIGIN = 'https://image.tmdb.org';
 const IMG_BASE = `${TMDB_IMAGE_ORIGIN}/t/p`;
 const TMDB_IMAGE_PROXY = '/tmdb_image';
-const TMDB_API_BASE = 'https://api.themoviedb.org/3';
-const TMDB_API_KEY = 'e1ab6c29240869d03ce20472b94dd2e4';
-const TMDB_WORKER_PROXY = 'https://snowy-bush-2e58.subhamj422.workers.dev/';
+const TMDB_WORKER_PROXY = 'https://snowy-bush-2e58.subhamj422.workers.dev';
 const FALLBACK_POSTER = '/static/img/no-poster.png';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -260,11 +258,12 @@ function hideThemeLoader(delay = 220) {
 }
 
 async function tmdb(path, params = {}) {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const query = new URLSearchParams({
-    api_key: TMDB_API_KEY,
-    language: 'en-US'
-  });
+  const cleanEndpoint = String(path || '').replace(/^\/+/, '');
+  const query = new URLSearchParams();
+
+  if (!Object.prototype.hasOwnProperty.call(params || {}, 'language')) {
+    query.set('language', 'en-US');
+  }
 
   Object.entries(params || {}).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') {
@@ -272,8 +271,8 @@ async function tmdb(path, params = {}) {
     }
   });
 
-  const originalApiUrl = `${TMDB_API_BASE}${cleanPath}?${query.toString()}`;
-  const fetchUrl = `${TMDB_WORKER_PROXY}?target=${encodeURIComponent(originalApiUrl)}`;
+  const endpoint = query.toString() ? `${cleanEndpoint}?${query.toString()}` : cleanEndpoint;
+  const fetchUrl = `${TMDB_WORKER_PROXY}/${endpoint}`;
 
   if (_cache[fetchUrl] && Date.now() - _cache[fetchUrl].ts < CACHE_TTL) {
     return _cache[fetchUrl].data;
@@ -281,15 +280,24 @@ async function tmdb(path, params = {}) {
 
   let res;
   try {
-    res = await fetch(fetchUrl);
+    res = await fetchFromAPI(endpoint, true);
   } catch (e) {
     throw new Error(`Network error: ${e.message || 'request failed'}`);
   }
 
-  if (!res.ok) throw new Error(`API ${res.status}`);
   const data = await res.json();
   _cache[fetchUrl] = { data, ts: Date.now() };
   return data;
+}
+
+async function fetchFromAPI(endpoint, rawResponse = false) {
+  const cleanEndpoint = String(endpoint || '').replace(/^\/+/, '');
+  const url = `${TMDB_WORKER_PROXY}/${cleanEndpoint}`;
+  // Debug: example call -> /movie/popular, /search/movie?query=avengers
+  console.debug('[TMDB Worker] GET', url);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return rawResponse ? res : res.json();
 }
 
 // ── IMAGE HELPERS ────────────────────────────────────────────
@@ -980,6 +988,170 @@ const playbackModalState = {
   showId: null
 };
 
+const TV_VIDEO_SERVERS = [
+  {
+    name: 'VidFast Pro',
+    url: (showId, season, episode, startSeconds = 0) => {
+      const base = `https://vidfast.pro/tv/${showId}/${season}/${episode}`;
+      return startSeconds > 5
+        ? `${base}?progress=${Math.floor(startSeconds)}`
+        : base;
+    },
+    primary: true
+  },
+  {
+    name: 'VidKing',
+    url: (showId, season, episode, startSeconds = 0) => {
+      let src = `https://www.vidking.net/embed/tv/${showId}/${season}/${episode}?color=00f5ff&autoPlay=true`;
+      if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
+      return src;
+    }
+  },
+  {
+    name: 'VidSrc',
+    url: (showId, season, episode) => `https://vidsrc.xyz/embed/tv/${showId}/${season}/${episode}`
+  },
+  {
+    name: '2Embed',
+    url: (showId, season, episode) => `https://2embed.cc/embedtv/${showId}&s=${season}&e=${episode}`
+  },
+  {
+    name: 'MultiEmbed',
+    url: (showId, season, episode) => `https://multiembed.mov/?video_id=${showId}&tmdb=1&s=${season}&e=${episode}`
+  }
+];
+
+const TV_SERVER_STORE_KEY = 'toxibhflix_last_tv_server';
+const TV_SERVER_TIMEOUT_MS = 12000;
+
+const tvPlaybackState = {
+  activeIndex: 0,
+  timeoutId: null,
+  autoTried: new Set(),
+  showId: null,
+  season: 1,
+  episode: 1,
+  startSeconds: 0,
+  autoSwitching: false
+};
+
+function getPrimaryTVServerIndex() {
+  const idx = TV_VIDEO_SERVERS.findIndex((s) => s.primary);
+  return idx >= 0 ? idx : 0;
+}
+
+function getPreferredTVServerIndex() {
+  const savedName = localStorage.getItem(TV_SERVER_STORE_KEY) || '';
+  const savedIdx = TV_VIDEO_SERVERS.findIndex((s) => s.name === savedName);
+  if (savedIdx >= 0) return savedIdx;
+  return getPrimaryTVServerIndex();
+}
+
+function setTVServerStatus(text) {
+  const status = document.getElementById('video-playback-server-status');
+  if (status) status.textContent = text;
+}
+
+function setActiveTVServerButton(index) {
+  const list = document.getElementById('video-playback-server-list');
+  if (!list) return;
+  list.querySelectorAll('.video-playback-server-btn').forEach((btn) => {
+    btn.classList.toggle('active', Number(btn.dataset.serverIndex) === index);
+  });
+}
+
+function renderTVServerButtons() {
+  const list = document.getElementById('video-playback-server-list');
+  if (!list) return;
+  list.innerHTML = '';
+  TV_VIDEO_SERVERS.forEach((server, index) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'video-playback-server-btn';
+    btn.dataset.serverIndex = String(index);
+    btn.textContent = server.name;
+    btn.addEventListener('click', () => {
+      tvPlaybackState.autoSwitching = false;
+      tvPlaybackState.autoTried = new Set([index]);
+      loadTVServerByIndex(index, tvPlaybackState.showId, tvPlaybackState.season, tvPlaybackState.episode, tvPlaybackState.startSeconds, true);
+    });
+    list.appendChild(btn);
+  });
+  setActiveTVServerButton(tvPlaybackState.activeIndex);
+}
+
+function clearTVServerTimeout() {
+  if (tvPlaybackState.timeoutId) {
+    clearTimeout(tvPlaybackState.timeoutId);
+    tvPlaybackState.timeoutId = null;
+  }
+}
+
+function tryNextTVServer(nextIndex) {
+  for (let i = nextIndex; i < TV_VIDEO_SERVERS.length; i += 1) {
+    if (!tvPlaybackState.autoTried.has(i)) {
+      tvPlaybackState.autoTried.add(i);
+      loadTVServerByIndex(i, tvPlaybackState.showId, tvPlaybackState.season, tvPlaybackState.episode, tvPlaybackState.startSeconds, false);
+      return;
+    }
+  }
+
+  setTVServerStatus('All servers failed. Use buttons to retry.');
+  showToast('⚠ All TV servers failed. Retry or choose another server.');
+}
+
+function loadTVServerByIndex(index, showId, season, episode, startSeconds = 0, isManual = false) {
+  const server = TV_VIDEO_SERVERS[index];
+  if (!server) return;
+
+  tvPlaybackState.activeIndex = index;
+  tvPlaybackState.showId = showId;
+  tvPlaybackState.season = season;
+  tvPlaybackState.episode = episode;
+  tvPlaybackState.startSeconds = startSeconds;
+
+  setActiveTVServerButton(index);
+  setTVServerStatus(`Loading ${server.name}...`);
+
+  const src = server.url(showId, season, episode, startSeconds);
+  openPlaybackOverlay(src, startSeconds > 5
+    ? `▶ Resuming S${season}E${episode} from ${formatTime(startSeconds)}`
+    : `▶ Playing S${season}E${episode}`, {
+    mediaType: 'tv',
+    showId,
+    currentSeasonNumber: season,
+    currentEpisodeNumber: episode,
+    totalEpisodesInSeason: playbackModalState.totalEpisodesInSeason
+  });
+
+  const iframe = document.querySelector('#video-playback-host iframe');
+  if (!iframe) return;
+
+  clearTVServerTimeout();
+  tvPlaybackState.timeoutId = setTimeout(() => {
+    setTVServerStatus('Server failed, switching...');
+    if (isManual) {
+      tvPlaybackState.autoTried = new Set([index]);
+    }
+    tvPlaybackState.autoSwitching = true;
+    tryNextTVServer(index + 1);
+  }, TV_SERVER_TIMEOUT_MS);
+
+  iframe.onload = () => {
+    clearTVServerTimeout();
+    setTVServerStatus(`${server.name} connected`);
+    localStorage.setItem(TV_SERVER_STORE_KEY, server.name);
+    console.info('[TV Player] Connected:', server.name);
+  };
+
+  iframe.onerror = () => {
+    clearTVServerTimeout();
+    setTVServerStatus('Server failed, switching...');
+    tvPlaybackState.autoSwitching = true;
+    tryNextTVServer(index + 1);
+  };
+}
+
 function ensurePlaybackOverlay() {
   if (!document.getElementById('video-playback-overlay-style')) {
     const style = document.createElement('style');
@@ -1087,6 +1259,59 @@ function ensurePlaybackOverlay() {
         opacity: 0.55;
         cursor: not-allowed;
       }
+      .video-playback-server-ui {
+        position: fixed;
+        top: 18px;
+        left: 18px;
+        z-index: 10000;
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        max-width: min(78vw, 860px);
+      }
+      .video-playback-server-status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(0,245,255,0.35);
+        background: rgba(0,0,0,0.6);
+        color: var(--nf-text);
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        backdrop-filter: blur(8px);
+      }
+      .video-playback-server-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .video-playback-server-btn {
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(0,245,255,0.35);
+        background: rgba(0,0,0,0.6);
+        color: var(--nf-text);
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        backdrop-filter: blur(8px);
+      }
+      .video-playback-server-btn:hover {
+        border-color: var(--cyan);
+        box-shadow: 0 0 10px rgba(0,245,255,0.28);
+      }
+      .video-playback-server-btn.active {
+        color: #021318;
+        background: linear-gradient(135deg, var(--cyan), #66fcff);
+        border-color: rgba(0,245,255,0.92);
+      }
     `;
     document.head.appendChild(style);
   }
@@ -1097,6 +1322,10 @@ function ensurePlaybackOverlay() {
     overlay.innerHTML = `
       <button type="button" class="video-playback-close" id="video-playback-close" aria-label="Close player">✕ Close</button>
       <button type="button" class="video-playback-next" id="video-playback-next" aria-label="Play next episode">⏭ Next Episode</button>
+      <div class="video-playback-server-ui" id="video-playback-server-ui">
+        <div class="video-playback-server-status" id="video-playback-server-status">Ready</div>
+        <div class="video-playback-server-list" id="video-playback-server-list"></div>
+      </div>
       <div id="video-playback-host"></div>`;
     document.body.appendChild(overlay);
     document.getElementById('video-playback-close')?.addEventListener('click', closePlaybackOverlay);
@@ -1108,6 +1337,7 @@ function ensurePlaybackOverlay() {
 
 function updatePlaybackOverlayControls() {
   const nextBtn = document.getElementById('video-playback-next');
+  const serverUi = document.getElementById('video-playback-server-ui');
   if (!nextBtn) return;
 
   const isTVPlayback = playbackModalState.mediaType === 'tv' && !!playbackModalState.showId;
@@ -1122,6 +1352,10 @@ function updatePlaybackOverlayControls() {
   nextBtn.classList.toggle('visible', isTVPlayback);
   nextBtn.disabled = !isTVPlayback || !canAdvance;
   nextBtn.textContent = canAdvance ? '⏭ Next Episode' : '⏹ Series Complete';
+
+  if (serverUi) {
+    serverUi.style.display = isTVPlayback ? 'flex' : 'none';
+  }
 }
 
 function openPlaybackOverlay(videoUrl, playbackLabel = 'Starting playback', options = {}) {
@@ -1160,6 +1394,7 @@ function openPlaybackOverlay(videoUrl, playbackLabel = 'Starting playback', opti
 function closePlaybackOverlay() {
   const overlay = document.getElementById('video-playback-overlay');
   const host = document.getElementById('video-playback-host');
+  clearTVServerTimeout();
   if (host) {
     const iframe = host.querySelector('iframe');
     if (iframe) iframe.src = '';
@@ -1179,6 +1414,13 @@ function closePlaybackOverlay() {
   playbackModalState.currentSeasonNumber = 1;
   playbackModalState.currentEpisodeNumber = 1;
   playbackModalState.totalEpisodesInSeason = 0;
+  tvPlaybackState.activeIndex = 0;
+  tvPlaybackState.showId = null;
+  tvPlaybackState.season = 1;
+  tvPlaybackState.episode = 1;
+  tvPlaybackState.startSeconds = 0;
+  tvPlaybackState.autoSwitching = false;
+  tvPlaybackState.autoTried = new Set();
   document.body.classList.remove('watch-playing');
   updatePlaybackOverlayControls();
 }
@@ -1540,17 +1782,11 @@ async function runSearchOverlayQuery(query) {
 
   box.innerHTML = '<div class="search-overlay-empty">Searching...</div>';
   try {
-    const originalApiUrl = `${TMDB_API_BASE}/search/multi?${new URLSearchParams({
-      api_key: TMDB_API_KEY,
-      language: 'en-US',
+    const data = await tmdb('/search/multi', {
       query,
       page: '1',
       include_adult: 'false'
-    }).toString()}`;
-    const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalApiUrl);
-    const res = await fetch(fetchUrl);
-    if (!res.ok) throw new Error(`Search API ${res.status}`);
-    const data = await res.json();
+    });
     const genreMap = await ensureSearchGenreMap();
     renderSearchOverlayResults((data.results || []).slice(0, 20), genreMap);
   } catch (e) {
@@ -1920,21 +2156,264 @@ function setText(id, val) {
   if (el) el.textContent = val;
 }
 
-function loadPlayer(movieId, startSeconds = 0) {
-  stopWatchHeroTrailer();
+const VIDEO_SERVERS = [
+  {
+    name: 'VidFast Pro',
+    url: (id) => `https://vidfast.pro/movie/${id}`,
+    primary: true
+  },
+  {
+    name: 'VidKing',
+    url: (id) => `https://www.vidking.net/embed/movie/${id}?color=00f5ff&autoPlay=true`
+  },
+  {
+    name: 'VidSrc',
+    url: (id) => `https://vidsrc.xyz/embed/movie/${id}`
+  },
+  {
+    name: '2Embed',
+    url: (id) => `https://2embed.cc/embed/${id}`
+  },
+  {
+    name: 'MultiEmbed',
+    url: (id) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
+  }
+];
 
-  let src = `https://www.vidking.net/embed/movie/${movieId}?color=00f5ff&autoPlay=true`;
-  if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
+const VIDEO_SERVER_STORE_KEY = 'toxibhflix_last_server';
+const PLAYER_FAILOVER_TIMEOUT = 12000;
 
-  openPlaybackOverlay(src, startSeconds > 5
-    ? `▶ Resuming from ${formatTime(startSeconds)}`
-    : '▶ Starting playback', {
-    mediaType: 'movie',
-    showId: null,
-    currentSeasonNumber: 1,
-    currentEpisodeNumber: 1,
-    totalEpisodesInSeason: 0
+const moviePlayerState = {
+  movieId: null,
+  activeIndex: 0,
+  autoTried: new Set(),
+  failoverTimer: null,
+  isAutoSwitching: false,
+  pendingStartSeconds: 0
+};
+
+function getServerIndexByName(name) {
+  if (!name) return -1;
+  return VIDEO_SERVERS.findIndex((s) => s.name === name);
+}
+
+function savePreferredServer(server) {
+  if (!server || !server.name) return;
+  localStorage.setItem(VIDEO_SERVER_STORE_KEY, server.name);
+}
+
+function getPreferredServerIndex() {
+  const savedName = localStorage.getItem(VIDEO_SERVER_STORE_KEY) || '';
+  const savedIndex = getServerIndexByName(savedName);
+  if (savedIndex >= 0) return savedIndex;
+  const primaryIndex = VIDEO_SERVERS.findIndex((s) => s.primary);
+  return primaryIndex >= 0 ? primaryIndex : 0;
+}
+
+function getPrimaryServerIndex() {
+  const primaryIndex = VIDEO_SERVERS.findIndex((s) => s.primary);
+  return primaryIndex >= 0 ? primaryIndex : 0;
+}
+
+function playerElements() {
+  return {
+    section: document.getElementById('movie-player-section'),
+    frame: document.getElementById('videoPlayer'),
+    serverList: document.getElementById('serverList'),
+    loading: document.getElementById('playerLoading'),
+    error: document.getElementById('playerError'),
+    errorMsg: document.getElementById('playerErrorMsg'),
+    status: document.getElementById('playerStatus'),
+    retryBtn: document.getElementById('playerRetryBtn'),
+    nextBtn: document.getElementById('playerNextBtn')
+  };
+}
+
+function setPlayerStatus(message) {
+  const { status } = playerElements();
+  if (status) status.textContent = message;
+}
+
+function setPlayerLoading(show) {
+  const { loading } = playerElements();
+  if (loading) loading.classList.toggle('visible', !!show);
+}
+
+function setPlayerError(message = '') {
+  const { error, errorMsg } = playerElements();
+  if (!error) return;
+  const hasError = !!message;
+  error.classList.toggle('visible', hasError);
+  if (errorMsg && hasError) errorMsg.textContent = message;
+}
+
+function highlightServerButton() {
+  const { serverList } = playerElements();
+  if (!serverList) return;
+  serverList.querySelectorAll('.server-btn').forEach((btn) => {
+    btn.classList.toggle('active', Number(btn.dataset.index) === moviePlayerState.activeIndex);
   });
+}
+
+function buildMovieServerUrl(server, movieId, startSeconds = 0) {
+  const base = server.url(movieId);
+  const query = new URLSearchParams();
+  if (startSeconds > 5) query.set('progress', String(Math.floor(startSeconds)));
+  const q = query.toString();
+  if (!q) return base;
+  return `${base}${base.includes('?') ? '&' : '?'}${q}`;
+}
+
+function scheduleFailover(index) {
+  clearTimeout(moviePlayerState.failoverTimer);
+  moviePlayerState.failoverTimer = setTimeout(() => {
+    if (moviePlayerState.activeIndex !== index) return;
+    setPlayerStatus('Server failed, switching...');
+    tryNextServer(index + 1);
+  }, PLAYER_FAILOVER_TIMEOUT);
+}
+
+function renderServerList() {
+  const { serverList } = playerElements();
+  if (!serverList) return;
+  serverList.innerHTML = '';
+  VIDEO_SERVERS.forEach((server, index) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'server-btn';
+    btn.dataset.index = String(index);
+    btn.textContent = server.name;
+    btn.addEventListener('click', () => {
+      loadServer(index, moviePlayerState.movieId, {
+        manual: true,
+        startSeconds: moviePlayerState.pendingStartSeconds || 0
+      });
+    });
+    serverList.appendChild(btn);
+  });
+  highlightServerButton();
+}
+
+function loadServer(index, movieId, options = {}) {
+  const { frame, section } = playerElements();
+  if (!frame || !section) return;
+  const server = VIDEO_SERVERS[index];
+  if (!server || !movieId) return;
+
+  moviePlayerState.movieId = movieId;
+  moviePlayerState.activeIndex = index;
+  if (options.startSeconds !== undefined) {
+    moviePlayerState.pendingStartSeconds = options.startSeconds || 0;
+  }
+
+  stopWatchHeroTrailer();
+  section.style.display = '';
+  if (options.scroll !== false) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  setPlayerError('');
+  setPlayerLoading(true);
+  setPlayerStatus(`Loading ${server.name}...`);
+  highlightServerButton();
+
+  clearTimeout(moviePlayerState.failoverTimer);
+  scheduleFailover(index);
+
+  frame.onload = () => {
+    if (moviePlayerState.activeIndex !== index) return;
+    clearTimeout(moviePlayerState.failoverTimer);
+    setPlayerLoading(false);
+    setPlayerError('');
+    setPlayerStatus(`${server.name} connected`);
+    console.info('[Player] Connected:', server.name);
+    savePreferredServer(server);
+  };
+
+  frame.onerror = () => {
+    if (moviePlayerState.activeIndex !== index) return;
+    clearTimeout(moviePlayerState.failoverTimer);
+    setPlayerStatus('Server failed, switching...');
+    console.warn('[Player] Failed:', server.name);
+    tryNextServer(index + 1);
+  };
+
+  const src = buildMovieServerUrl(server, movieId, moviePlayerState.pendingStartSeconds || 0);
+  console.debug('[Player] Loading URL:', src);
+  frame.src = src;
+}
+
+function tryNextServer(nextIndex) {
+  const { frame } = playerElements();
+  if (!frame || !moviePlayerState.movieId) return;
+
+  if (!moviePlayerState.isAutoSwitching) {
+    moviePlayerState.isAutoSwitching = true;
+    moviePlayerState.autoTried = new Set();
+  }
+
+  for (let i = nextIndex; i < VIDEO_SERVERS.length; i += 1) {
+    if (!moviePlayerState.autoTried.has(i)) {
+      moviePlayerState.autoTried.add(i);
+      loadServer(i, moviePlayerState.movieId, {
+        manual: false,
+        startSeconds: moviePlayerState.pendingStartSeconds || 0
+      });
+      return;
+    }
+  }
+
+  setPlayerLoading(false);
+  setPlayerError('All servers failed. Please retry or switch manually.');
+  setPlayerStatus('No active server available');
+  moviePlayerState.isAutoSwitching = false;
+}
+
+function initMoviePlayerControls(movieId) {
+  const { retryBtn, nextBtn } = playerElements();
+  if (retryBtn && !retryBtn.dataset.bound) {
+    retryBtn.dataset.bound = '1';
+    retryBtn.addEventListener('click', () => {
+      if (!moviePlayerState.movieId) return;
+      setPlayerStatus('Retrying current server...');
+      loadServer(moviePlayerState.activeIndex, moviePlayerState.movieId, {
+        manual: true,
+        startSeconds: moviePlayerState.pendingStartSeconds || 0
+      });
+    });
+  }
+
+  if (nextBtn && !nextBtn.dataset.bound) {
+    nextBtn.dataset.bound = '1';
+    nextBtn.addEventListener('click', () => {
+      if (!moviePlayerState.movieId) return;
+      setPlayerStatus('Switching server...');
+      const next = (moviePlayerState.activeIndex + 1) % VIDEO_SERVERS.length;
+      loadServer(next, moviePlayerState.movieId, {
+        manual: true,
+        startSeconds: moviePlayerState.pendingStartSeconds || 0
+      });
+    });
+  }
+
+  renderServerList();
+  moviePlayerState.movieId = movieId;
+}
+
+function loadPlayer(movieId, startSeconds = 0) {
+  const qp = new URLSearchParams();
+  qp.set('type', 'movie');
+  qp.set('id', String(movieId));
+  if (window._currentMovieTitle) qp.set('title', window._currentMovieTitle);
+  if (startSeconds > 0) qp.set('start', String(Math.floor(startSeconds)));
+
+  window.location.href = `player.html?${qp.toString()}`;
+
+  if (startSeconds > 5) {
+    showToast(`▶ Resuming from ${formatTime(startSeconds)}`);
+  } else {
+    showToast('▶ Starting playback');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2065,15 +2544,18 @@ const allMediaState = {
 };
 
 function buildDiscoverProxyUrl(type, page) {
-  const originalTMDBUrl = `${TMDB_API_BASE}/discover/${type}?api_key=${TMDB_API_KEY}&language=en-US&sort_by=popularity.desc&include_adult=false`;
-  return "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalTMDBUrl + `&page=${page}`);
+  const query = new URLSearchParams({
+    language: 'en-US',
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+    page: String(page)
+  });
+  return `discover/${type}?${query.toString()}`;
 }
 
 async function fetchAllMediaPage(type, page) {
-  const fetchUrl = buildDiscoverProxyUrl(type, page);
-  const res = await fetch(fetchUrl);
-  if (!res.ok) throw new Error(`Discover ${type} ${res.status}`);
-  const data = await res.json();
+  const endpoint = buildDiscoverProxyUrl(type, page);
+  const data = await fetchFromAPI(endpoint);
   return Array.isArray(data.results) ? data.results : [];
 }
 
@@ -2574,15 +3056,10 @@ function renderSeasonTabs(seasons, showId, activeSeason) {
 
 async function fetchSeasonEpisodesViaProxy(showId, seasonNum) {
   const params = new URLSearchParams({
-    api_key: TMDB_API_KEY,
     language: 'en-US'
   });
-  const originalTMDBApiUrl = `${TMDB_API_BASE}/tv/${showId}/season/${seasonNum}?${params.toString()}`;
-  const fetchUrl = "https://snowy-bush-2e58.subhamj422.workers.dev/?target=" + encodeURIComponent(originalTMDBApiUrl);
-
-  const res = await fetch(fetchUrl);
-  if (!res.ok) throw new Error(`Season API ${res.status}`);
-  return await res.json();
+  const endpoint = `tv/${showId}/season/${seasonNum}?${params.toString()}`;
+  return await fetchFromAPI(endpoint);
 }
 
 function renderEpisodeCards(showId) {
@@ -2692,35 +3169,15 @@ async function fetchAndRenderEpisodes(showId, seasonNum, activeEpisode) {
 }
 
 function loadTVPlayer(showId, season, episode, startSeconds = 0) {
-  stopWatchHeroTrailer();
+  const qp = new URLSearchParams();
+  qp.set('type', 'tv');
+  qp.set('id', String(showId));
+  qp.set('season', String(season || 1));
+  qp.set('episode', String(episode || 1));
+  if (window._currentShowTitle) qp.set('title', window._currentShowTitle);
+  if (startSeconds > 0) qp.set('start', String(Math.floor(startSeconds)));
 
-  window._currentShowId  = showId;
-  window._currentSeason  = season;
-  window._currentEpisode = episode;
-
-  if (window._episodeState) {
-    window._episodeState.selectedSeason = season;
-    window._episodeState.activeEpisode = episode;
-  }
-
-  playbackModalState.mediaType = 'tv';
-  playbackModalState.showId = showId;
-  playbackModalState.currentSeasonNumber = season;
-  playbackModalState.currentEpisodeNumber = episode;
-  playbackModalState.totalEpisodesInSeason = Number(window._episodeState?.totalEpisodesInSeason || (window._episodeState?.episodes || []).length || 0);
-
-  let src = `https://www.vidking.net/embed/tv/${showId}/${season}/${episode}?color=00f5ff&autoPlay=true`;
-  if (startSeconds > 5) src += `&progress=${Math.floor(startSeconds)}`;
-
-  openPlaybackOverlay(src, startSeconds > 5
-    ? `▶ Resuming S${season}E${episode} from ${formatTime(startSeconds)}`
-    : `▶ Playing S${season}E${episode}`, {
-    mediaType: 'tv',
-    showId,
-    currentSeasonNumber: season,
-    currentEpisodeNumber: episode,
-    totalEpisodesInSeason: playbackModalState.totalEpisodesInSeason
-  });
+  window.location.href = `player.html?${qp.toString()}`;
 }
 
 // ═══════════════════════════════════════════════════════════

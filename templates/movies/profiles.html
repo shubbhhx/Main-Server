@@ -118,28 +118,60 @@
   }
 
   /* ── PROFILE GRID ── */
-  .profiles-grid { display: flex; justify-content: center; flex-wrap: wrap; gap: 24px; margin-bottom: 44px; }
+  .profiles-grid,
+  .profile-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 20px;
+    justify-content: center;
+    margin-bottom: 44px;
+  }
 
-  .profile-item {
-    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  .profile-item,
+  .profile-card {
+    width: 140px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
     cursor: pointer;
     transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .profile-item:hover { transform: scale(1.1) translateY(-5px); }
-  .profile-item:hover .avatar {
+  .profile-item:hover,
+  .profile-card:hover { transform: scale(1.08) translateY(-4px); }
+  .profile-item:hover .avatar,
+  .profile-card:hover .avatar {
     border-color: var(--cyan);
-    box-shadow: var(--glow), 0 0 30px rgba(0,245,255,.25);
+    box-shadow: var(--glow), 0 0 0 6px rgba(0,245,255,.12);
   }
-  .profile-item:hover .pname { color: var(--cyan); text-shadow: var(--glow); }
+  .profile-item:hover .avatar img,
+  .profile-card:hover img {
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(0,240,255,0.5);
+  }
+  .profile-item:hover .pname,
+  .profile-card:hover .profile-name { color: var(--cyan); text-shadow: var(--glow); }
 
   .avatar {
-    width: 120px; height: 120px;
-    border-radius: 6px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
     border: 2px solid rgba(0,245,255,.18);
     display: flex; align-items: center; justify-content: center;
     font-size: 3.5rem;
     transition: border-color .3s, box-shadow .3s;
     position: relative; overflow: hidden;
+  }
+  .avatar img,
+  .profile-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    position: relative;
+    z-index: 2;
+    transition: transform .25s ease, box-shadow .25s ease;
   }
   .avatar::after {
     content: '';
@@ -154,13 +186,17 @@
   .profile-item:nth-child(4) .avatar { background: linear-gradient(135deg, #04020a, #140a02); }
   .profile-item:nth-child(5) .avatar { background: rgba(0,245,255,.04); border-style: dashed; border-color: rgba(0,245,255,.2); }
 
-  .pname {
+  .pname,
+  .profile-name {
     font-family: 'Share Tech Mono', monospace;
-    font-size: .78rem;
+    font-size: 18px;
+    font-weight: 600;
     letter-spacing: .1em;
     color: rgba(224,247,255,.55);
     text-transform: uppercase;
     transition: color .25s, text-shadow .25s;
+    margin-top: 8px;
+    text-align: center;
   }
 
   /* ── MANAGE BUTTON — portfolio secondary style ── */
@@ -231,7 +267,16 @@
   }
   #toast.show { transform: translateX(-50%) translateY(0); }
 
-  @media (max-width: 600px) { .avatar { width: 90px; height: 90px; font-size: 2.8rem; } }
+  @media (max-width: 600px) {
+    .profiles-grid,
+    .profile-container { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px; }
+    .profile-item,
+    .profile-card { width: 120px; }
+    .avatar,
+    .profile-card img { width: 90px; height: 90px; font-size: 2.8rem; }
+    .pname,
+    .profile-name { font-size: 14px; }
+  }
 </style>
 </head>
 <body>
@@ -337,17 +382,19 @@
     profiles = profiles.map(p => ({
       id: p.id || '',
       name: p.name || p.profile_name || 'Profile',
-      emoji: p.emoji || p.avatar || '👤'
+      emoji: p.emoji || p.avatar || '👤',
+      profile_image: p.profile_image || ''
     }));
 
     loadedProfiles = profiles;
     renderActiveProfileStrip();
 
     const grid = document.getElementById('profiles-grid');
+    const esc = (v) => String(v || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
     grid.innerHTML = profiles.map((p) => `
-      <div class="profile-item" onclick="handleSelectProfile('${p.id || ''}','${p.name}','${p.emoji}')">
-        <div class="avatar">${p.emoji}</div>
-        <div class="pname">${p.name}</div>
+      <div class="profile-item" onclick="handleSelectProfile('${esc(p.id || '')}','${esc(p.name)}','${esc(p.emoji)}','${esc(p.profile_image || '')}')">
+        <div class="avatar">${p.profile_image ? `<img src="${esc(p.profile_image)}" alt="${esc(p.name)}">` : esc(p.emoji)}</div>
+        <div class="pname">${esc(p.name)}</div>
       </div>
     `).join('') + `
       <div class="profile-item" onclick="handleGuestLogin()">
@@ -362,11 +409,12 @@
     localStorage.setItem('activeProfile', JSON.stringify(profileState));
   }
 
-  function handleSelectProfile(id, name, emoji) {
+  function handleSelectProfile(id, name, emoji, profileImage) {
     const profileState = {
       id: id || '',
       name: name || 'Profile',
       emoji: emoji || '👤',
+      profile_image: profileImage || '',
       isGuest: false,
       ts: Date.now()
     };
@@ -417,7 +465,7 @@
       return;
     }
 
-    handleSelectProfile(match.id || '', match.name, match.emoji || '👤');
+    handleSelectProfile(match.id || '', match.name, match.emoji || '👤', match.profile_image || '');
   }
 
   function renderActiveProfileStrip() {

@@ -281,12 +281,17 @@ def _init_flix_db():
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
             profile_name TEXT NOT NULL,
+            profile_image TEXT,
             avatar TEXT,
             created_at TEXT NOT NULL,
             UNIQUE(user_id, profile_name),
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
+
+    profile_cols = [row[1] for row in c.execute('PRAGMA table_info(profiles)').fetchall()]
+    if 'profile_image' not in profile_cols:
+        c.execute('ALTER TABLE profiles ADD COLUMN profile_image TEXT')
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS watch_history (
@@ -351,7 +356,7 @@ def _init_flix_db():
 
     c.execute('''
         CREATE VIEW IF NOT EXISTS Profiles AS
-        SELECT id, profile_name AS name, avatar
+        SELECT id, profile_name AS name, avatar, profile_image
         FROM profiles
     ''')
 

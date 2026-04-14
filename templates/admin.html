@@ -102,6 +102,18 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
 .pnl-hl{font-family:'Orbitron',monospace;font-size:.73rem;color:var(--c);letter-spacing:.08em}
 .pnl-b{padding:18px}
 
+/* ── PROFILE IMAGE MANAGER ── */
+.pm-card{background:rgba(0,245,255,.025);border:1px solid rgba(0,245,255,.1);padding:13px;position:relative;transition:border-color .25s,box-shadow .25s}
+.pm-card:hover{border-color:rgba(0,245,255,.3);box-shadow:0 0 14px rgba(0,245,255,.14)}
+.pm-avatar{width:74px;height:74px;border-radius:50%;overflow:hidden;margin:0 auto 10px;border:1px solid rgba(0,245,255,.35);background:linear-gradient(135deg,rgba(0,245,255,.12),rgba(255,0,110,.1));display:flex;align-items:center;justify-content:center;font-size:2rem;box-shadow:0 0 12px rgba(0,245,255,.22);transition:all .25s}
+.pm-avatar:hover{box-shadow:0 0 18px rgba(0,245,255,.3)}
+.pm-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.pm-upload{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.pm-upload input[type=file]{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:rgba(200,232,255,.5)}
+.pm-upload-btn{padding:6px 9px;font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.06em;background:rgba(0,245,255,.08);color:var(--c);border:1px solid rgba(0,245,255,.2);cursor:pointer;transition:all .2s}
+.pm-upload-btn:hover{background:rgba(0,245,255,.16);box-shadow:var(--glow)}
+.pm-upload-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+
 /* ── CHART ── */
 .chart{height:110px;display:flex;align-items:flex-end;gap:3px}
 .cb-w{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%}
@@ -826,20 +838,96 @@ async function loadFlix() {
 function renderProfileEditor() {
   const ed = document.getElementById('profile-editor');
   if (!ed) return;
+
+  const safeAttr = (v) => String(v || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
+
   ed.innerHTML = _flixProfiles.map((p, i) => `
-    <div style="background:rgba(0,245,255,.025);border:1px solid rgba(0,245,255,.1);padding:13px;position:relative">
+    <div class="pm-card">
+      <div class="pm-avatar" id="pimg-wrap-${i}">
+        ${p.profile_image ? `<img src="${safeAttr(p.profile_image)}" alt="${safeAttr(p.name || 'Profile')}" id="pimg-${i}">` : `<span id="pimg-fallback-${i}">${safeAttr(p.emoji || '👤')}</span>`}
+      </div>
+      <div class="pm-upload">
+        <input type="file" id="pfile-${i}" accept="image/png,image/jpeg" onchange="onProfileImageFileSelected(${i})">
+        <button class="pm-upload-btn" id="pup-${i}" onclick="uploadProfileImage(${i})" ${p.id ? '' : 'disabled'}>${p.id ? 'UPLOAD IMAGE' : 'SAVE PROFILE FIRST'}</button>
+      </div>
       <div class="fr full" style="margin-bottom:8px">
         <div class="fg">
           <label class="fl">EMOJI</label>
-          <input class="fi" style="font-size:1.4rem;text-align:center" value="${p.emoji || '👤'}" id="fe-${i}" maxlength="2">
+          <input class="fi" style="font-size:1.4rem;text-align:center" value="${safeAttr(p.emoji || '👤')}" id="fe-${i}" maxlength="2">
         </div>
       </div>
       <div class="fg" style="margin-bottom:8px">
         <label class="fl">DISPLAY NAME</label>
-        <input class="fi" value="${p.name || ''}" id="fn-${i}">
+        <input class="fi" value="${safeAttr(p.name || '')}" id="fn-${i}">
       </div>
       <button class="ta ta-d" onclick="removeProfile(${i})" style="width:100%;padding:5px">REMOVE</button>
     </div>`).join('');
+}
+
+function onProfileImageFileSelected(idx) {
+  const input = document.getElementById('pfile-' + idx);
+  const wrap = document.getElementById('pimg-wrap-' + idx);
+  if (!input || !wrap || !input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+  const allowed = ['image/jpeg', 'image/png'];
+  if (!allowed.includes((file.type || '').toLowerCase())) {
+    toast('Only JPG/JPEG/PNG allowed', 'err');
+    input.value = '';
+    return;
+  }
+  if (file.size > (2 * 1024 * 1024)) {
+    toast('Max upload size is 2MB', 'err');
+    input.value = '';
+    return;
+  }
+
+  const blobUrl = URL.createObjectURL(file);
+  wrap.innerHTML = `<img src="${blobUrl}" alt="Preview" style="opacity:0;transition:opacity .25s" onload="this.style.opacity='1'">`;
+}
+
+async function uploadProfileImage(idx) {
+  const p = _flixProfiles[idx];
+  if (!p || !p.id) {
+    toast('Save profile first, then upload image', 'err');
+    return;
+  }
+
+  const input = document.getElementById('pfile-' + idx);
+  const btn = document.getElementById('pup-' + idx);
+  if (!input || !input.files || !input.files[0]) {
+    toast('Pick an image first', 'err');
+    return;
+  }
+
+  const file = input.files[0];
+  const allowed = ['image/jpeg', 'image/png'];
+  if (!allowed.includes((file.type || '').toLowerCase())) {
+    toast('Only JPG/JPEG/PNG allowed', 'err');
+    return;
+  }
+  if (file.size > (2 * 1024 * 1024)) {
+    toast('Max upload size is 2MB', 'err');
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('profile_id', p.id);
+  fd.append('profile_image', file);
+
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('POST', '/admin/upload-profile-image', fd);
+    if (!r || !r.success) {
+      toast((r && r.error) || 'Upload failed', 'err');
+      return;
+    }
+    _flixProfiles[idx].profile_image = r.image_url;
+    toast('Profile image updated ✓', 'ok');
+    renderProfileEditor();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function addProfileSlot() {

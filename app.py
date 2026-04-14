@@ -122,7 +122,14 @@ SECRET_KEY   = 'toxibh-shubh@6969'
 ALLOWED_IMG  = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
 ALLOWED_PDF  = {'application/pdf'}
 DEFAULT_TMDB_KEY = 'e1ab6c29240869d03ce20472b94dd2e4'
-TMDB_PROXY_WORKER_URL = 'https://snowy-bush-2e58.subhamj422.workers.dev/'
+TMDB_PROXY_WORKER_URL = (os.getenv('WORKER_URL') or 'https://snowy-bush-2e58.subhamj422.workers.dev').rstrip('/')
+PROFILE_UPLOAD_DIR = os.path.join(app.static_folder, 'uploads', 'profiles')
+PROFILE_UPLOAD_WEB_PREFIX = '/static/uploads/profiles/'
+PROFILE_ALLOWED_MIME = {'image/jpeg', 'image/png'}
+PROFILE_ALLOWED_EXT = {'.jpg', '.jpeg', '.png'}
+PROFILE_MAX_BYTES = 2 * 1024 * 1024
+
+os.makedirs(PROFILE_UPLOAD_DIR, exist_ok=True)
 
 def log_admin_action(action, detail=''):
     actor = session.get('admin') and 'admin' or 'guest'
@@ -139,6 +146,27 @@ def _set_tmdb_key(key):
     if value:
         return db.set_setting('tmdb_key', value)
     return False
+
+def _tmdb_worker_url(path, params=None):
+    import urllib.parse
+
+    endpoint = (path or '').strip()
+    if not endpoint.startswith('/'):
+        endpoint = '/' + endpoint
+
+    if not params:
+        return f'{TMDB_PROXY_WORKER_URL}{endpoint}'
+
+    query = {}
+    if hasattr(params, 'items'):
+        for k, v in params.items():
+            if v is None or v == '':
+                continue
+            query[str(k)] = str(v)
+
+    if not query:
+        return f'{TMDB_PROXY_WORKER_URL}{endpoint}'
+    return f"{TMDB_PROXY_WORKER_URL}{endpoint}?{urllib.parse.urlencode(query)}"
 
 # ── AUTH DECORATOR ────────────────────────────────────────
 def admin_required(f):
@@ -301,10 +329,13 @@ def root_js_static(filename):
 def _normalize_profile(profile_row):
     if not profile_row:
         return None
+
+    profile_image = (profile_row.get('profile_image') or '').strip()
     return {
         'id': profile_row.get('id'),
         'name': profile_row.get('profile_name'),
         'emoji': profile_row.get('avatar') or '👤',
+        'profile_image': profile_image or None,
         'created_at': profile_row.get('created_at')
     }
 
@@ -349,7 +380,7 @@ def _int_or_zero(value):
 
 @app.route('/api/movies/profiles', methods=['GET'])
 def api_movies_profiles_get():
-    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    rows = db.fetch_all('SELECT id, profile_name, avatar, profile_image, created_at FROM profiles ORDER BY created_at ASC')
     if rows:
         return jsonify([_normalize_profile(r) for r in rows])
 
@@ -366,17 +397,18 @@ def api_movies_profiles_get():
             (p.get('id') or str(uuid.uuid4()), 'local_user', name, p.get('emoji') or '👤', now)
         )
 
-    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    rows = db.fetch_all('SELECT id, profile_name, avatar, profile_image, created_at FROM profiles ORDER BY created_at ASC')
     return jsonify([_normalize_profile(r) for r in rows])
 
 @app.route('/api/profiles', methods=['GET'])
 def api_profiles_get():
-    rows = db.fetch_all('SELECT id, profile_name, avatar, created_at FROM profiles ORDER BY created_at ASC')
+    rows = db.fetch_all('SELECT id, profile_name, avatar, profile_image, created_at FROM profiles ORDER BY created_at ASC')
     return jsonify([
         {
             'id': r.get('id'),
             'name': r.get('profile_name'),
             'avatar': r.get('avatar') or '👤',
+            'profile_image': (r.get('profile_image') or '').strip() or None,
             'created_at': r.get('created_at')
         }
         for r in rows
@@ -411,9 +443,75 @@ def api_profiles_create():
             'id': profile_id,
             'name': profile_name,
             'avatar': avatar,
+            'profile_image': None,
             'created_at': created_at
         }
     })
+
+@app.route('/admin/upload-profile-image', methods=['POST'])
+@admin_required
+def admin_upload_profile_image():
+    profile_id = (request.form.get('profile_id') or request.form.get('id') or '').strip()
+    if not profile_id:
+        return jsonify({'error': 'profile_id is required'}), 400
+
+    profile = db.fetch_one('SELECT id, user_id, profile_image FROM profiles WHERE id = ?', (profile_id,))
+    if not profile:
+        return jsonify({'error': 'Profile not found'}), 404
+
+    if 'profile_image' not in request.files:
+        return jsonify({'error': 'profile_image file is required'}), 400
+
+    file = request.files.get('profile_image')
+    if not file or not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+
+    safe_name = secure_filename(file.filename)
+    _, ext = os.path.splitext(safe_name)
+    ext = ext.lower()
+    if ext not in PROFILE_ALLOWED_EXT:
+        return jsonify({'error': 'Only jpg, jpeg, png allowed'}), 400
+
+    mime = (file.mimetype or '').lower()
+    if mime not in PROFILE_ALLOWED_MIME:
+        return jsonify({'error': 'Invalid file type'}), 400
+
+    blob = file.read()
+    if not blob:
+        return jsonify({'error': 'Empty file'}), 400
+    if len(blob) > PROFILE_MAX_BYTES:
+        return jsonify({'error': 'File too large (max 2MB)'}), 400
+
+    if blob.startswith(b'\x89PNG\r\n\x1a\n'):
+        normalized_ext = '.png'
+    elif blob.startswith(b'\xff\xd8\xff'):
+        normalized_ext = '.jpg'
+    else:
+        return jsonify({'error': 'Invalid image content'}), 400
+
+    safe_profile_id = re.sub(r'[^a-zA-Z0-9_-]', '_', profile_id)[:64] or 'profile'
+    file_name = f'profile_{safe_profile_id}_{int(time.time())}{normalized_ext}'
+    full_path = os.path.join(PROFILE_UPLOAD_DIR, file_name)
+
+    with open(full_path, 'wb') as f:
+        f.write(blob)
+
+    image_url = f'{PROFILE_UPLOAD_WEB_PREFIX}{file_name}'
+
+    old_image = (profile.get('profile_image') or '').strip()
+    if old_image.startswith(PROFILE_UPLOAD_WEB_PREFIX):
+        old_name = os.path.basename(old_image)
+        old_path = os.path.join(PROFILE_UPLOAD_DIR, old_name)
+        if os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except Exception:
+                pass
+
+    db.execute_query('UPDATE profiles SET profile_image = ? WHERE id = ?', (image_url, profile_id))
+    log_admin_action('profile_image_upload', f'id={profile_id},image={file_name}')
+
+    return jsonify({'success': True, 'image_url': image_url})
 
 @app.route('/api/movies/profile/resolve', methods=['POST'])
 def api_movies_profile_resolve():
@@ -477,7 +575,7 @@ def api_admin_profile_create():
         'INSERT INTO profiles (id, user_id, profile_name, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
         (profile_id, 'local_user', profile_name, avatar, created_at)
     )
-    row = db.fetch_one('SELECT id, profile_name, avatar, created_at FROM profiles WHERE id = ?', (profile_id,))
+    row = db.fetch_one('SELECT id, profile_name, avatar, profile_image, created_at FROM profiles WHERE id = ?', (profile_id,))
     log_admin_action('profile_create', f'id={profile_id},name={profile_name}')
     return jsonify({'success': True, 'profile': _normalize_profile(row)})
 
@@ -502,7 +600,7 @@ def api_admin_profile_update():
         'UPDATE profiles SET profile_name = ?, avatar = ? WHERE id = ?',
         (profile_name, avatar, profile_id)
     )
-    row = db.fetch_one('SELECT id, profile_name, avatar, created_at FROM profiles WHERE id = ?', (profile_id,))
+    row = db.fetch_one('SELECT id, profile_name, avatar, profile_image, created_at FROM profiles WHERE id = ?', (profile_id,))
     log_admin_action('profile_update', f'id={profile_id},name={profile_name}')
     return jsonify({'success': True, 'profile': _normalize_profile(row)})
 
@@ -514,9 +612,19 @@ def api_admin_profile_delete():
     if not profile_id:
         return jsonify({'error': 'profile_id is required'}), 400
 
-    existing = db.fetch_one('SELECT id FROM profiles WHERE id = ?', (profile_id,))
+    existing = db.fetch_one('SELECT id, profile_image FROM profiles WHERE id = ?', (profile_id,))
     if not existing:
         return jsonify({'error': 'Profile not found'}), 404
+
+    old_image = (existing.get('profile_image') or '').strip()
+    if old_image.startswith(PROFILE_UPLOAD_WEB_PREFIX):
+        old_name = os.path.basename(old_image)
+        old_path = os.path.join(PROFILE_UPLOAD_DIR, old_name)
+        if os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except Exception:
+                pass
 
     db.execute_query('DELETE FROM watch_history WHERE profile_id = ?', (profile_id,))
     db.execute_query('DELETE FROM resume_progress WHERE profile_id = ?', (profile_id,))
@@ -783,20 +891,16 @@ def api_movies_config_save():
 @app.route('/api/movies/tmdb-status', methods=['GET'])
 @admin_required
 def api_movies_tmdb_status():
-    import urllib.request, urllib.error, urllib.parse
-    key = _get_tmdb_key()
-    if not key:
-        return jsonify({'status': 'no_key', 'message': 'No TMDB API key configured'})
+    import urllib.request, urllib.error
     try:
-        target_url = f'https://api.themoviedb.org/3/configuration?api_key={key}'
-        url = f"{TMDB_PROXY_WORKER_URL}?target={urllib.parse.quote(target_url, safe='')}"
+        url = _tmdb_worker_url('/configuration', {'language': 'en-US'})
         req = urllib.request.Request(url, headers={'User-Agent': 'ToxibhFlix/1.0'})
         with urllib.request.urlopen(req, timeout=5) as res:
             if res.status == 200:
                 return jsonify({'status': 'ok', 'message': 'TMDB API is reachable ✓', 'code': 200})
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            return jsonify({'status': 'invalid_key', 'message': 'Invalid API key (401)', 'code': 401})
+            return jsonify({'status': 'invalid_key', 'message': 'Worker TMDB key is invalid (401)', 'code': 401})
         return jsonify({'status': 'error', 'message': f'HTTP {e.code}', 'code': e.code})
     except Exception as ex:
         return jsonify({'status': 'unreachable', 'message': str(ex)})
@@ -808,20 +912,14 @@ TMDB_CACHE_TTL = 300  # 5 minutes
 
 def _tmdb_fetch(path, params=None):
     """Fetch from TMDB using server's IP, with caching."""
-    key = _get_tmdb_key()
-    if not key:
-        abort(500, description="TMDB API key not configured")
-        
-    import urllib.parse
-    
-    # Build URL
-    base_url = f"https://api.themoviedb.org/3{path}"
-    query = {'api_key': key, 'language': 'en-US'}
-    if params:
-        query.update(params)
-    
-    target_url = f"{base_url}?{urllib.parse.urlencode(query)}"
-    url = f"{TMDB_PROXY_WORKER_URL}?target={urllib.parse.quote(target_url, safe='')}"
+    query = {'language': 'en-US'}
+    if params and hasattr(params, 'items'):
+        for k, v in params.items():
+            if v is None or v == '':
+                continue
+            query[str(k)] = str(v)
+
+    url = _tmdb_worker_url(path, query)
     
     # Check cache
     now = time.time()
