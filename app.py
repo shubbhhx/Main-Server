@@ -3,7 +3,7 @@
 #  Run:  python app.py
 # ═══════════════════════════════════════════════════════════
 
-import os, uuid, bcrypt, mimetypes, json, time, re, logging
+import os, uuid, bcrypt, mimetypes, json, time, re, logging, subprocess, sys, shutil
 import urllib.request, urllib.error
 from urllib.parse import parse_qs, urlparse
 import requests as req_session   # for Vidking proxy (streaming)
@@ -12,6 +12,7 @@ from functools import wraps
 from logging.handlers import RotatingFileHandler
 from flask import (Flask, request, jsonify, session,
                    send_from_directory, abort, g, redirect, Response)
+from flask_sock import Sock
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from flask_limiter import Limiter
@@ -19,6 +20,10 @@ from flask_limiter.util import get_remote_address
 from flask_session import Session
 import psutil
 import db
+from services.code_runner import CodeRunnerService
+from services.filesystem import UserFilesystemService
+from services.os_shared import build_file_items, read_json_file, write_json_file, ensure_dir
+from services.terminal import TerminalSessionManager
 
 # ── APP SETUP ────────────────────────────────────────────
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -32,6 +37,7 @@ app.config['SESSION_COOKIE_SECURE'] = False
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 
 limiter = Limiter(get_remote_address, app=app, default_limits=["500 per hour"])
+sock = Sock(app)
 
 # ── INIT DATABASE ────────────────────────────────────────
 db.init_db()
@@ -43,11 +49,38 @@ DB_DIR      = os.path.join(DATA_ROOT, 'databases')
 VAULT_DIR   = os.path.join(DATA_ROOT, 'vault')
 PHOTOS_DIR  = os.path.join(VAULT_DIR, 'photos')
 PDFS_DIR    = os.path.join(VAULT_DIR, 'pdfs')
+WALLPAPERS_DIR = os.path.join(VAULT_DIR, 'wallpapers')
+USER_PROJECTS_DIR = os.path.join(DATA_ROOT, 'user_projects')
+OS_TEMP_DIR = os.path.join(DATA_ROOT, 'os_tmp')
+OS_STATE_DIR = os.path.join(DATA_ROOT, 'os_state')
+OS_SETTINGS_FILE = os.path.join(OS_STATE_DIR, 'settings.json')
+OS_CHAT_FILE = os.path.join(OS_STATE_DIR, 'chat_history.json')
+OS_WALLPAPER_INDEX_FILE = os.path.join(OS_STATE_DIR, 'wallpapers.json')
 LOGS_DIR    = os.path.join(DATA_ROOT, 'logs')
 SERVER_LOG  = os.path.join(LOGS_DIR, 'server.log')
 
-for d in [DB_DIR, PHOTOS_DIR, PDFS_DIR, LOGS_DIR]:
+for d in [DB_DIR, PHOTOS_DIR, PDFS_DIR, WALLPAPERS_DIR, USER_PROJECTS_DIR, OS_TEMP_DIR, OS_STATE_DIR, LOGS_DIR]:
     os.makedirs(d, exist_ok=True)
+
+DEFAULT_OS_SETTINGS = {
+    'pin': '0000',
+    'wallpaper': {'mode': 'default', 'url': '/static/os/default-wallpaper.svg', 'name': 'default'},
+    'accent': '#00f5ff',
+    'bootSound': False
+}
+
+app.config['TOXIBH_DATA_ROOT'] = DATA_ROOT
+app.config['TOXIBH_OS_STATE_DIR'] = OS_STATE_DIR
+app.config['TOXIBH_OS_SETTINGS_FILE'] = OS_SETTINGS_FILE
+app.config['TOXIBH_OS_CHAT_FILE'] = OS_CHAT_FILE
+app.config['TOXIBH_WALLPAPERS_DIR'] = WALLPAPERS_DIR
+app.config['TOXIBH_WALLPAPER_INDEX_FILE'] = OS_WALLPAPER_INDEX_FILE
+app.config['TOXIBH_PROJECTS_DIR'] = USER_PROJECTS_DIR
+app.config['TOXIBH_TEMP_DIR'] = OS_TEMP_DIR
+
+_OS_CODE_RUNNER = CodeRunnerService(OS_TEMP_DIR)
+_OS_FILESYSTEM = UserFilesystemService(USER_PROJECTS_DIR)
+_TERMINAL_MANAGER = TerminalSessionManager()
 
 logger = logging.getLogger('toxibh-control-center')
 if not logger.handlers:
@@ -287,6 +320,18 @@ def admin_page():
 @app.route('/movies')
 def movies_page():
     return send_from_directory('templates/movies', 'profiles.html')
+
+@app.route('/flix')
+def flix_page():
+    return send_from_directory('templates/movies', 'profiles.html')
+
+@app.route('/flix/<path:subpath>')
+def flix_subpath(subpath):
+    return redirect(f'/movies/{subpath}')
+
+@app.route('/os')
+def os_page():
+    return send_from_directory('templates/os', 'index.html')
 
 @app.route('/movies/browse')
 def movies_browse():
@@ -2047,6 +2092,282 @@ def get_game_leaderboard():
     if rows is None:
         return jsonify({'error': 'Game name required'}), 400
     return jsonify(rows)
+
+# ══════════════════════════════════════════════════════════
+#  TOXIBH OS APIs
+# ══════════════════════════════════════════════════════════
+def _os_chat_reply(message):
+    text = (message or '').strip().lower()
+    if not text:
+        return 'Say something and I will help you navigate TOXIBH OS.'
+    if 'flix' in text or 'movie' in text:
+        return 'Open the Flix app from desktop or run "open flix" in Terminal.'
+    if 'admin' in text:
+        return 'Use the Admin app tile. It opens the /admin panel in a new tab.'
+    if 'vault' in text or 'file' in text:
+        return 'Vault shows your photos and PDFs from secure storage.'
+    if 'pin' in text or 'password' in text:
+        return 'You can update your lock PIN from Settings > Security.'
+    return 'TOXIBH OS is online. Try opening apps from desktop or Start menu.'
+
+
+@app.route('/api/os/settings', methods=['GET'])
+def api_os_settings_get():
+    saved = read_json_file(OS_SETTINGS_FILE, DEFAULT_OS_SETTINGS)
+    merged = dict(DEFAULT_OS_SETTINGS)
+    if isinstance(saved, dict):
+        merged.update(saved)
+    wallpaper = merged.get('wallpaper')
+    if isinstance(wallpaper, str):
+        merged['wallpaper'] = {'mode': 'preset', 'name': wallpaper, 'url': '/static/os/default-wallpaper.svg'}
+    elif not isinstance(wallpaper, dict):
+        merged['wallpaper'] = dict(DEFAULT_OS_SETTINGS['wallpaper'])
+    return jsonify(merged)
+
+
+@app.route('/api/os/settings', methods=['POST'])
+def api_os_settings_set():
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Invalid payload'}), 400
+
+    current = read_json_file(OS_SETTINGS_FILE, DEFAULT_OS_SETTINGS)
+    if not isinstance(current, dict):
+        current = dict(DEFAULT_OS_SETTINGS)
+
+    if 'pin' in payload:
+        current['pin'] = str(payload['pin']).strip()
+
+    if 'wallpaper' in payload:
+        wallpaper = payload['wallpaper']
+        if isinstance(wallpaper, dict):
+            current['wallpaper'] = wallpaper
+        elif isinstance(wallpaper, str):
+            current['wallpaper'] = {'mode': 'preset', 'name': wallpaper, 'url': '/static/os/default-wallpaper.svg'}
+
+    if 'accent' in payload:
+        current['accent'] = payload['accent']
+
+    if 'bootSound' in payload:
+        current['bootSound'] = bool(payload['bootSound'])
+
+    pin = str(current.get('pin') or '').strip()
+    if not re.fullmatch(r'\d{4,8}', pin):
+        return jsonify({'error': 'PIN must be 4 to 8 digits'}), 400
+    current['pin'] = pin
+
+    write_json_file(OS_SETTINGS_FILE, current)
+    return jsonify({'success': True, 'settings': current})
+
+
+@app.route('/api/wallpaper/upload', methods=['POST'])
+def api_wallpaper_upload():
+    file_obj = request.files.get('wallpaper') or request.files.get('file')
+    if not file_obj:
+        return jsonify({'error': 'wallpaper file is required'}), 400
+
+    filename = secure_filename(file_obj.filename or '')
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {'.png', '.jpg', '.jpeg', '.webp'}:
+        return jsonify({'error': 'Unsupported file type'}), 400
+
+    ensure_dir(WALLPAPERS_DIR)
+    stored_name = f'{uuid.uuid4().hex}{ext}'
+    stored_path = os.path.join(WALLPAPERS_DIR, stored_name)
+    file_obj.save(stored_path)
+
+    index = read_json_file(OS_WALLPAPER_INDEX_FILE, {})
+    if not isinstance(index, dict):
+        index = {}
+    index[stored_name] = {
+        'id': stored_name,
+        'name': filename,
+        'url': f'/vault/wallpapers/{stored_name}',
+    }
+    write_json_file(OS_WALLPAPER_INDEX_FILE, index)
+    return jsonify({'success': True, 'wallpaper': index[stored_name]})
+
+
+@app.route('/api/wallpaper/set', methods=['POST'])
+def api_wallpaper_set():
+    payload = request.get_json(silent=True) or {}
+    wallpaper_url = (payload.get('url') or payload.get('wallpaperUrl') or '').strip()
+    wallpaper_name = (payload.get('name') or payload.get('wallpaperName') or 'custom').strip()
+    if not wallpaper_url:
+        return jsonify({'error': 'wallpaper url is required'}), 400
+
+    current = read_json_file(OS_SETTINGS_FILE, DEFAULT_OS_SETTINGS)
+    if not isinstance(current, dict):
+        current = dict(DEFAULT_OS_SETTINGS)
+    current['wallpaper'] = {'mode': 'custom', 'url': wallpaper_url, 'name': wallpaper_name}
+    write_json_file(OS_SETTINGS_FILE, current)
+    return jsonify({'success': True, 'wallpaper': current['wallpaper']})
+
+
+@app.route('/api/wallpaper/current', methods=['GET'])
+def api_wallpaper_current():
+    settings = api_os_settings_get().get_json()
+    return jsonify({'wallpaper': settings.get('wallpaper', DEFAULT_OS_SETTINGS['wallpaper'])})
+
+
+@app.route('/vault/wallpapers/<path:filename>')
+def serve_os_wallpaper(filename):
+    return send_from_directory(WALLPAPERS_DIR, filename)
+
+
+@app.route('/api/os/files', methods=['GET'])
+def api_os_files():
+    file_group = (request.args.get('group') or 'all').strip().lower()
+    if file_group not in {'all', 'photos', 'pdfs'}:
+        return jsonify({'error': 'group must be one of all, photos, pdfs'}), 400
+
+    payload = {}
+    if file_group in {'all', 'photos'}:
+        payload['photos'] = build_file_items(PHOTOS_DIR, '/static/photos')
+    if file_group in {'all', 'pdfs'}:
+        payload['pdfs'] = build_file_items(PDFS_DIR, '/static/pdfs')
+    payload['projects'] = _OS_FILESYSTEM.list_tree()
+    return jsonify(payload)
+
+
+@app.route('/api/files', methods=['GET'])
+def api_files_list():
+    return jsonify({'tree': _OS_FILESYSTEM.list_tree()})
+
+
+@app.route('/api/files/create', methods=['POST'])
+def api_files_create():
+    payload = request.get_json(silent=True) or {}
+    path = (payload.get('path') or '').strip()
+    is_folder = bool(payload.get('isFolder') or payload.get('folder'))
+    if not path:
+        return jsonify({'error': 'path is required'}), 400
+    try:
+        return jsonify(_OS_FILESYSTEM.create(path, is_folder=is_folder))
+    except FileExistsError:
+        return jsonify({'error': 'Path already exists'}), 409
+    except ValueError as ex:
+        return jsonify({'error': str(ex)}), 400
+
+
+@app.route('/api/files/save', methods=['POST'])
+def api_files_save():
+    payload = request.get_json(silent=True) or {}
+    path = (payload.get('path') or '').strip()
+    content = payload.get('content') or ''
+    if not path:
+        return jsonify({'error': 'path is required'}), 400
+    try:
+        return jsonify(_OS_FILESYSTEM.save(path, content))
+    except ValueError as ex:
+        return jsonify({'error': str(ex)}), 400
+
+
+@app.route('/api/files/delete', methods=['DELETE'])
+def api_files_delete():
+    payload = request.get_json(silent=True) or {}
+    path = (payload.get('path') or request.args.get('path') or '').strip()
+    if not path:
+        return jsonify({'error': 'path is required'}), 400
+    try:
+        return jsonify(_OS_FILESYSTEM.delete(path))
+    except FileNotFoundError:
+        return jsonify({'error': 'Path not found'}), 404
+    except ValueError as ex:
+        return jsonify({'error': str(ex)}), 400
+
+
+@app.route('/api/files/open', methods=['GET'])
+def api_files_open():
+    path = (request.args.get('path') or '').strip()
+    if not path:
+        return jsonify({'error': 'path is required'}), 400
+    try:
+        return jsonify(_OS_FILESYSTEM.read_file(path))
+    except FileNotFoundError:
+        return jsonify({'error': 'File not found'}), 404
+    except ValueError as ex:
+        return jsonify({'error': str(ex)}), 400
+
+
+@app.route('/api/os/chat', methods=['GET'])
+def api_os_chat_get():
+    history = read_json_file(OS_CHAT_FILE, [])
+    if not isinstance(history, list):
+        history = []
+    return jsonify(history[-60:])
+
+
+@app.route('/api/os/chat', methods=['POST'])
+def api_os_chat_post():
+    payload = request.get_json(silent=True) or {}
+    user_message = (payload.get('message') or '').strip()
+    if not user_message:
+        return jsonify({'error': 'message is required'}), 400
+
+    user_message = user_message[:500]
+    history = read_json_file(OS_CHAT_FILE, [])
+    if not isinstance(history, list):
+        history = []
+
+    now_iso = datetime.utcnow().isoformat()
+    assistant_reply = _os_chat_reply(user_message)
+    history.append({'role': 'user', 'message': user_message, 'time': now_iso})
+    history.append({'role': 'assistant', 'message': assistant_reply, 'time': now_iso})
+    history = history[-120:]
+    write_json_file(OS_CHAT_FILE, history)
+
+    return jsonify({'reply': assistant_reply, 'history': history[-60:]})
+
+
+@app.route('/api/code/run', methods=['POST'])
+@app.route('/api/os/code/execute', methods=['POST'])
+@limiter.limit('20 per minute')
+def api_os_code_execute():
+    payload = request.get_json(silent=True) or {}
+    language = (payload.get('language') or 'python').strip().lower()
+    code = payload.get('code') or ''
+    result = _OS_CODE_RUNNER.run(language, code)
+    status = 200 if result.get('success') else 400
+    return jsonify(result), status
+
+
+@sock.route('/ws/terminal')
+def ws_terminal(ws):
+    session_id = session.get('os_terminal_session_id')
+    if not session_id:
+        session_id = uuid.uuid4().hex
+        session['os_terminal_session_id'] = session_id
+
+    terminal = _TERMINAL_MANAGER.get_or_create(session_id, shell=os.environ.get('SHELL') or '/bin/bash')
+    ws.send('TOXIBH OS Terminal ready.\r\n')
+
+    try:
+        initial_output = terminal.read_ready()
+        if initial_output:
+            ws.send(initial_output.decode('utf-8', errors='ignore'))
+
+        while True:
+            output = terminal.read_ready()
+            if output:
+                ws.send(output.decode('utf-8', errors='ignore'))
+
+            message = ws.receive(timeout=0.05)
+            if message is None:
+                continue
+            if message == '__close__':
+                break
+
+            allowed, warning = _OS_CODE_RUNNER.validate_terminal_command(message)
+            if not allowed:
+                ws.send(f'{warning}\r\n')
+                continue
+
+            terminal.write(message)
+    except Exception:
+        pass
+    finally:
+        _TERMINAL_MANAGER.close(session_id)
 
 # ══════════════════════════════════════════════════════════
 #  RUN

@@ -311,6 +311,16 @@
   @keyframes loaderGlow{from{opacity:0.5;}to{opacity:1;text-shadow:var(--glow);}}
   .loader-sub{font-family:'Share Tech Mono',monospace;font-size:.65rem;letter-spacing:.2em;color:rgba(255,0,110,.6);text-transform:uppercase;}
 
+  .entry-overlay{position:fixed;inset:0;z-index:999999;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .3s ease;}
+  .entry-title{font-family:'Orbitron',monospace;font-size:clamp(3.2rem,12vw,10rem);font-weight:900;line-height:1;letter-spacing:.08em;transform:scale(.7);opacity:0;transition:transform .45s cubic-bezier(0.34,1.56,0.64,1),opacity .35s ease;}
+  .entry-sub{font-family:'Share Tech Mono',monospace;font-size:clamp(.55rem,1.4vw,.9rem);letter-spacing:.5em;text-transform:uppercase;margin-top:14px;opacity:0;transition:opacity .35s ease .2s;}
+  .entry-overlay.active .entry-title{transform:scale(1);opacity:1;}
+  .entry-overlay.active .entry-sub{opacity:1;}
+  #toxibhflix-overlay .entry-title{color:#e50914;text-shadow:0 0 40px rgba(229,9,20,.9),0 0 120px rgba(229,9,20,.5);}
+  #toxibhflix-overlay .entry-sub{color:rgba(255,255,255,.7);}
+  #toxibh-os-overlay .entry-title{color:var(--cyan);text-shadow:var(--glow);}
+  #toxibh-os-overlay .entry-sub{color:rgba(0,245,255,.7);}
+
   @media(max-width:900px){
     .games-container{grid-template-columns:1fr;}
     .mobile-controls{display:flex;}
@@ -428,7 +438,8 @@
     <a href="#certifications">Certs</a>
     <a href="#education">Education</a>
     <a href="#games">Games</a>
-    <a href="/movies" id="movies-nav-link">Movies</a>
+    <a href="/flix" id="movies-nav-link">Movies</a>
+    <a href="/os" id="os-nav-link">Toxibh OS</a>
     <a href="#contact">Contact</a>
   </div>
   <div class="nav-status">
@@ -1850,38 +1861,45 @@ async function submitContactForm(e) {
 </script>
 
 <!-- TOXIBHFLIX CINEMATIC TRANSITION OVERLAY -->
-<div id="toxibhflix-overlay" style="
-  position:fixed;inset:0;z-index:999999;
-  background:#000;
-  display:none;flex-direction:column;align-items:center;justify-content:center;
-  opacity:0;transition:opacity 0.3s;">
-  <div style="position:relative;display:flex;align-items:center;justify-content:center;">
-    <div id="tfx-letter" style="
-      font-family:'Orbitron',monospace;font-size:clamp(5rem,18vw,12rem);font-weight:900;
-      color:#e50914;line-height:1;
-      text-shadow:0 0 40px rgba(229,9,20,0.9),0 0 120px rgba(229,9,20,0.5);
-      transform:scale(0);transition:transform 0.5s cubic-bezier(0.34,1.56,0.64,1);">T</div>
-  </div>
-  <div id="tfx-name" style="
-    font-family:'Share Tech Mono',monospace;font-size:clamp(0.6rem,2vw,1rem);
-    letter-spacing:0.6em;color:rgba(255,255,255,0.7);text-transform:uppercase;
-    margin-top:12px;opacity:0;transition:opacity 0.4s 0.5s;">OXIBH FLIX</div>
+<div id="toxibhflix-overlay" class="entry-overlay">
+  <div class="entry-title">FLIX</div>
+  <div class="entry-sub">Cinematic Environment</div>
+</div>
+
+<div id="toxibh-os-overlay" class="entry-overlay">
+  <div class="entry-title">TOXIBH OS</div>
+  <div class="entry-sub">Booting Desktop Environment</div>
 </div>
 
 <script>
 function toxibhFlixTransition(e) {
   e.preventDefault();
   const overlay = document.getElementById('toxibhflix-overlay');
-  const letter  = document.getElementById('tfx-letter');
-  const name    = document.getElementById('tfx-name');
   overlay.style.display = 'flex';
   requestAnimationFrame(() => {
+    overlay.classList.add('active');
     overlay.style.opacity = '1';
-    setTimeout(() => { letter.style.transform = 'scale(1)'; }, 50);
-    setTimeout(() => { name.style.opacity = '1'; }, 500);
-    setTimeout(() => { window.location.href = '/movies'; }, 1200);
+    setTimeout(() => { window.location.href = '/flix'; }, 1000);
   });
 }
+
+function toxibhOsTransition(e) {
+  e.preventDefault();
+  const overlay = document.getElementById('toxibh-os-overlay');
+  overlay.style.display = 'flex';
+  requestAnimationFrame(() => {
+    overlay.classList.add('active');
+    overlay.style.opacity = '1';
+    setTimeout(() => { window.location.href = '/os'; }, 1050);
+  });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const moviesLink = document.getElementById('movies-nav-link');
+  const osLink = document.getElementById('os-nav-link');
+  if (moviesLink) moviesLink.addEventListener('click', toxibhFlixTransition);
+  if (osLink) osLink.addEventListener('click', toxibhOsTransition);
+});
 </script>
 </body>
 </html>
