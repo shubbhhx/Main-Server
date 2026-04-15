@@ -38,6 +38,14 @@ const state = {
   wallpapers: [],
 };
 
+function safeBind(element, eventName, handler, label) {
+  if (!element) {
+    console.warn('Element not found:', label);
+    return;
+  }
+  element.addEventListener(eventName, handler);
+}
+
 const appList = [
   { id: 'flix', label: 'Flix', icon: '🎬', type: 'external' },
   { id: 'vault', label: 'Vault', icon: '🗂', type: 'window' },
@@ -133,6 +141,17 @@ async function runBootSequence() {
   pinInput.focus();
 }
 
+function failSafeBootTimeout() {
+  setTimeout(() => {
+    const boot = document.getElementById('boot-screen');
+    if (boot && boot.style.display !== 'none' && !boot.classList.contains('hidden')) {
+      console.warn('Boot timeout — forcing OS load');
+      boot.classList.add('hidden');
+      if (lockScreen) lockScreen.classList.remove('hidden');
+    }
+  }, 4000);
+}
+
 function unlockDesktop() {
   const entered = (pinInput.value || '').trim();
   const expected = String(state.settings.pin || '0000').trim();
@@ -160,15 +179,19 @@ function toggleStartMenu() {
 }
 
 function setupTaskbar() {
-  startBtn.addEventListener('click', toggleStartMenu);
-  lockBtn.addEventListener('click', relaunchLockScreen);
-  fullscreenBtn.addEventListener('click', async () => {
+  safeBind(startBtn, 'click', toggleStartMenu, 'start-btn');
+  safeBind(lockBtn, 'click', relaunchLockScreen, 'lock-btn');
+  safeBind(fullscreenBtn, 'click', async () => {
     if (!document.fullscreenElement) {
+      if (!desktopRoot) {
+        console.error('Desktop root not found — cannot enter fullscreen');
+        return;
+      }
       await desktopRoot.requestFullscreen();
     } else {
       await document.exitFullscreen();
     }
-  });
+  }, 'fullscreen-btn');
 
   document.addEventListener('click', event => {
     if (!startMenu.contains(event.target) && event.target !== startBtn) {
@@ -202,9 +225,9 @@ function renderStartMenu() {
   `;
 
   startMenu.querySelectorAll('.start-item[data-app]').forEach(button => {
-    button.addEventListener('click', () => openApp(button.dataset.app));
+    safeBind(button, 'click', () => openApp(button.dataset.app), `start-item:${button.dataset.app}`);
   });
-  startMenu.querySelector('#start-lock-btn').addEventListener('click', relaunchLockScreen);
+  safeBind(startMenu.querySelector('#start-lock-btn'), 'click', relaunchLockScreen, 'start-lock-btn');
 }
 
 function openFlixApp() {
@@ -603,26 +626,40 @@ function openApp(appId) {
 }
 
 function wireEvents() {
-  unlockBtn.addEventListener('click', unlockDesktop);
-  pinInput.addEventListener('keydown', event => {
+  safeBind(unlockBtn, 'click', unlockDesktop, 'unlock-btn');
+  safeBind(pinInput, 'keydown', event => {
     if (event.key === 'Enter') unlockDesktop();
-  });
+  }, 'pin-input');
 
-  desktopIcons.addEventListener('click', event => {
+  safeBind(desktopIcons, 'click', event => {
     const button = event.target.closest('[data-app]');
     if (!button) return;
     openApp(button.dataset.app);
-  });
-
-  renderStartMenu();
-  setupTaskbar();
+  }, 'desktop-icons');
 }
 
-(async function init() {
+async function init() {
+  console.log('OS INIT STARTED');
+  console.log('Desktop element:', desktop);
+
+  if (!desktop) {
+    console.error('Desktop not found — stopping OS init');
+    return;
+  }
+
   setClock();
   setInterval(setClock, 1000);
+  failSafeBootTimeout();
   wireEvents();
   await loadSettings();
   renderDesktopIcons();
+  renderStartMenu();
+  setupTaskbar();
   await runBootSequence();
-})();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => init());
+} else {
+  init();
+}
