@@ -46,6 +46,32 @@ function safeBind(element, eventName, handler, label) {
   element.addEventListener(eventName, handler);
 }
 
+async function initOS() {
+  console.log('OS BOOT START');
+  console.log('Desktop:', document.getElementById('desktop'));
+  console.log('Windows:', document.querySelectorAll('.window'));
+
+  if (!desktop) {
+    console.error('Desktop not found — stopping OS init');
+    return;
+  }
+
+  setClock();
+  setInterval(setClock, 1000);
+  failSafeBootTimeout();
+  renderDesktopIcons();
+  renderStartMenu();
+  setupTaskbar();
+  wireEvents();
+  bindDesktopIcons();
+  bindWindowControls();
+  bindStartMenu();
+  initWindowManager();
+  initDragSystem();
+  await loadSettings();
+  await runBootSequence();
+}
+
 const appList = [
   { id: 'flix', label: 'Flix', icon: '🎬', type: 'external' },
   { id: 'vault', label: 'Vault', icon: '🗂', type: 'window' },
@@ -176,10 +202,16 @@ function relaunchLockScreen() {
 
 function toggleStartMenu() {
   startMenu.classList.toggle('hidden');
+  startMenu.classList.toggle('active');
 }
 
 function setupTaskbar() {
-  safeBind(startBtn, 'click', toggleStartMenu, 'start-btn');
+  if (startBtn) {
+    startBtn.onclick = () => {
+      startMenu.classList.toggle('active');
+      startMenu.classList.toggle('hidden');
+    };
+  }
   safeBind(lockBtn, 'click', relaunchLockScreen, 'lock-btn');
   safeBind(fullscreenBtn, 'click', async () => {
     if (!document.fullscreenElement) {
@@ -192,11 +224,84 @@ function setupTaskbar() {
       await document.exitFullscreen();
     }
   }, 'fullscreen-btn');
+}
 
-  document.addEventListener('click', event => {
+function bindDesktopIcons() {
+  safeBind(desktop, 'click', event => {
+    const icon = event.target.closest('.desktop-icon');
+    if (!icon) return;
+    openApp(icon.dataset.app);
+  }, 'desktop-icons-delegation');
+}
+
+function bindWindowControls() {
+  safeBind(document, 'click', event => {
+    const closeButton = event.target.closest('.win-close');
+    if (closeButton) {
+      const win = closeButton.closest('.window');
+      if (win) win.remove();
+      return;
+    }
+
+    const minButton = event.target.closest('.win-min');
+    if (minButton) {
+      const win = minButton.closest('.window');
+      if (win) win.style.display = 'none';
+      return;
+    }
+
+    const maxButton = event.target.closest('.win-max');
+    if (maxButton) {
+      const win = maxButton.closest('.window');
+      if (win) win.classList.toggle('maximized');
+    }
+  }, 'window-controls-delegation');
+}
+
+function bindStartMenu() {
+  safeBind(startMenu, 'click', event => {
+    const button = event.target.closest('.start-item[data-app]');
+    if (!button) return;
+    openApp(button.dataset.app);
+  }, 'start-menu-delegation');
+
+  safeBind(document, 'click', event => {
     if (!startMenu.contains(event.target) && event.target !== startBtn) {
+      startMenu.classList.remove('active');
       startMenu.classList.add('hidden');
     }
+  }, 'start-menu-outside-click');
+}
+
+function initWindowManager() {
+  console.log('initWindowManager()');
+}
+
+function initDragSystem() {
+  document.querySelectorAll('.window-header').forEach(header => {
+    header.onmousedown = function (e) {
+      const win = header.parentElement;
+      if (!win) return;
+
+      let shiftX = e.clientX - win.getBoundingClientRect().left;
+      let shiftY = e.clientY - win.getBoundingClientRect().top;
+
+      function moveAt(pageX, pageY) {
+        win.style.left = pageX - shiftX + 'px';
+        win.style.top = pageY - shiftY + 'px';
+      }
+
+      function onMouseMove(event) {
+        moveAt(event.pageX, event.pageY);
+      }
+
+      document.addEventListener('mousemove', onMouseMove);
+
+      document.onmouseup = function () {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.onmouseup = null;
+      };
+    };
   });
 }
 
@@ -204,11 +309,9 @@ function renderDesktopIcons() {
   desktopIcons.innerHTML = '';
   appList.forEach(app => {
     const button = document.createElement('button');
-    button.className = 'app-icon glass-panel';
+    button.className = 'desktop-icon app-icon glass-panel';
     button.dataset.app = app.id;
     button.innerHTML = `<span>${app.icon}</span><small>${app.label}</small>`;
-    button.addEventListener('click', () => openApp(app.id));
-    button.addEventListener('dblclick', () => openApp(app.id));
     desktopIcons.appendChild(button);
   });
 }
@@ -224,9 +327,6 @@ function renderStartMenu() {
     <button class="start-item danger" id="start-lock-btn">Lock</button>
   `;
 
-  startMenu.querySelectorAll('.start-item[data-app]').forEach(button => {
-    safeBind(button, 'click', () => openApp(button.dataset.app), `start-item:${button.dataset.app}`);
-  });
   safeBind(startMenu.querySelector('#start-lock-btn'), 'click', relaunchLockScreen, 'start-lock-btn');
 }
 
@@ -630,36 +730,12 @@ function wireEvents() {
   safeBind(pinInput, 'keydown', event => {
     if (event.key === 'Enter') unlockDesktop();
   }, 'pin-input');
-
-  safeBind(desktopIcons, 'click', event => {
-    const button = event.target.closest('[data-app]');
-    if (!button) return;
-    openApp(button.dataset.app);
-  }, 'desktop-icons');
-}
-
-async function init() {
-  console.log('OS INIT STARTED');
-  console.log('Desktop element:', desktop);
-
-  if (!desktop) {
-    console.error('Desktop not found — stopping OS init');
-    return;
-  }
-
-  setClock();
-  setInterval(setClock, 1000);
-  failSafeBootTimeout();
-  wireEvents();
-  await loadSettings();
-  renderDesktopIcons();
-  renderStartMenu();
-  setupTaskbar();
-  await runBootSequence();
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => init());
+  document.addEventListener('DOMContentLoaded', () => {
+    initOS();
+  });
 } else {
-  init();
+  initOS();
 }

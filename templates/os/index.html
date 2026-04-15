@@ -50,13 +50,13 @@
     </div>
 
     <template id="window-template">
-      <section class="os-window glass-panel" data-app-window>
+      <section class="window os-window glass-panel" data-app-window>
         <header class="window-header" data-drag-handle>
           <div class="window-title">App</div>
           <div class="window-controls">
-            <button type="button" data-action="minimize">_</button>
-            <button type="button" data-action="maximize">▢</button>
-            <button type="button" data-action="close">x</button>
+            <button type="button" class="win-min" data-action="minimize">_</button>
+            <button type="button" class="win-max" data-action="maximize">▢</button>
+            <button type="button" class="win-close" data-action="close">x</button>
           </div>
         </header>
         <div class="window-body"></div>

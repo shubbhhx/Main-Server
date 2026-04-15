@@ -102,6 +102,7 @@ export class WindowManager {
 
     const node = this.template.content.firstElementChild.cloneNode(true);
     node.dataset.app = appId;
+    node.classList.add('window');
     node.querySelector('.window-title').textContent = title;
     node.querySelector('.window-body').innerHTML = bodyHtml;
     node.style.left = `${48 + this.windows.size * 26}px`;
@@ -109,9 +110,9 @@ export class WindowManager {
     node.style.width = options.width || 'min(1120px, calc(100vw - 28px))';
     node.style.height = options.height || 'min(720px, calc(100vh - 90px))';
 
-    const closeButton = node.querySelector("[data-action='close']");
-    const minimizeButton = node.querySelector("[data-action='minimize']");
-    const maximizeButton = node.querySelector("[data-action='maximize']");
+    const closeButton = node.querySelector('.win-close') || node.querySelector("[data-action='close']");
+    const minimizeButton = node.querySelector('.win-min') || node.querySelector("[data-action='minimize']");
+    const maximizeButton = node.querySelector('.win-max') || node.querySelector("[data-action='maximize']");
 
     closeButton.addEventListener('click', () => this.closeWindow(appId));
     minimizeButton.addEventListener('click', () => this.minimizeWindow(appId));
