@@ -1857,6 +1857,7 @@ async function initIndexPage() {
   }
 
   bindGlobalSearchOverlay();
+  bindRecommendationRowAutoRefresh('movie');
   initCinematicIdleMode();
   initTVModeEnhancements();
 }
@@ -2405,6 +2406,7 @@ function loadPlayer(movieId, startSeconds = 0) {
   qp.set('type', 'movie');
   qp.set('id', String(movieId));
   if (window._currentMovieTitle) qp.set('title', window._currentMovieTitle);
+  if (window._currentMoviePoster) qp.set('poster', window._currentMoviePoster);
   if (startSeconds > 0) qp.set('start', String(Math.floor(startSeconds)));
 
   window.location.href = `player.html?${qp.toString()}`;
@@ -2701,6 +2703,8 @@ async function initTVPage() {
   } finally {
     hideThemeLoader();
   }
+
+  bindRecommendationRowAutoRefresh('tv');
 
 }
 
@@ -3175,6 +3179,7 @@ function loadTVPlayer(showId, season, episode, startSeconds = 0) {
   qp.set('season', String(season || 1));
   qp.set('episode', String(episode || 1));
   if (window._currentShowTitle) qp.set('title', window._currentShowTitle);
+  if (window._currentShowPoster) qp.set('poster', window._currentShowPoster);
   if (startSeconds > 0) qp.set('start', String(Math.floor(startSeconds)));
 
   window.location.href = `player.html?${qp.toString()}`;
@@ -3399,6 +3404,77 @@ async function loadWatchlistRow(containerId, sectionId) {
   }
 }
 
+function _safeGetWatchHistoryItems() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function _isValidTmdbId(value) {
+  const id = String(value || '').trim();
+  return /^\d+$/.test(id);
+}
+
+function _historySeedsByType(mediaType = 'movie', maxSeeds = 8) {
+  const targetType = mediaType === 'tv' ? 'tv' : 'movie';
+  const history = _safeGetWatchHistoryItems()
+    .filter((item) => String(item?.type || 'movie') === targetType && _isValidTmdbId(item?.id))
+    .sort((a, b) => Number(b?.timestamp || 0) - Number(a?.timestamp || 0));
+
+  const seen = new Set();
+  const seeds = [];
+  history.forEach((item) => {
+    const id = String(item.id);
+    if (seen.has(id)) return;
+    seen.add(id);
+    seeds.push(id);
+  });
+  return seeds.slice(0, maxSeeds);
+}
+
+async function _fetchHistoryFallbackRecommendations(mediaType = 'movie', limit = 20) {
+  const targetType = mediaType === 'tv' ? 'tv' : 'movie';
+  const seeds = _historySeedsByType(targetType, 6);
+  if (!seeds.length) return [];
+
+  const watched = new Set(_historySeedsByType(targetType, 50));
+  const merged = [];
+
+  for (const seedId of seeds) {
+    let results = [];
+    try {
+      const recData = await tmdb(`/${targetType}/${seedId}/recommendations`);
+      results = Array.isArray(recData?.results) ? recData.results : [];
+    } catch (e) {
+      results = [];
+    }
+
+    if (!results.length) {
+      try {
+        const simData = await tmdb(`/${targetType}/${seedId}/similar`);
+        results = Array.isArray(simData?.results) ? simData.results : [];
+      } catch (e) {
+        results = [];
+      }
+    }
+
+    results.forEach((item) => {
+      const candidateId = String(item?.id || '');
+      if (!_isValidTmdbId(candidateId)) return;
+      if (watched.has(candidateId)) return;
+      if (merged.some((m) => String(m.id) === candidateId)) return;
+      merged.push(item);
+    });
+
+    if (merged.length >= limit) break;
+  }
+
+  return merged.slice(0, limit);
+}
+
 async function loadRecommendationsRow(containerId, mediaType = 'movie') {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -3414,15 +3490,53 @@ async function loadRecommendationsRow(containerId, mediaType = 'movie') {
     const res = await fetch(`/api/movies/recommendations?${q.toString()}`, { headers: _profileHeaders() });
     if (!res.ok) throw new Error('recommendations failed');
     const data = await res.json();
-    const results = data.results || [];
+    let results = Array.isArray(data.results) ? data.results : [];
+
+    if (!results.length) {
+      results = await _fetchHistoryFallbackRecommendations(mediaType, 20);
+    }
+
     if (mediaType === 'tv') {
       renderTVRow(results, containerId);
     } else {
       renderRow(results, containerId);
     }
   } catch (e) {
-    container.innerHTML = '';
+    const fallback = await _fetchHistoryFallbackRecommendations(mediaType, 20);
+    if (mediaType === 'tv') {
+      renderTVRow(fallback, containerId);
+    } else {
+      renderRow(fallback, containerId);
+    }
+
+    if (!fallback.length) {
+      container.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Recommendations are unavailable right now.</p>';
+    }
   }
+}
+
+let _recommendationRowRefreshTimer = null;
+let _recommendationRowListenersBound = false;
+
+function bindRecommendationRowAutoRefresh(defaultMediaType = 'movie') {
+  if (_recommendationRowListenersBound) return;
+  _recommendationRowListenersBound = true;
+
+  const refresh = () => {
+    const row = document.getElementById('row-recommended');
+    if (!row) return;
+
+    const inferredType = window.location.pathname.includes('/tvshows') ? 'tv' : defaultMediaType;
+    if (_recommendationRowRefreshTimer) clearTimeout(_recommendationRowRefreshTimer);
+    _recommendationRowRefreshTimer = setTimeout(() => {
+      loadRecommendationsRow('row-recommended', inferredType);
+    }, 180);
+  };
+
+  window.addEventListener('toxibhflix:history-updated', refresh);
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'watchHistory') refresh();
+  });
 }
 
 function renderTop10Row(movies, containerId, type) {

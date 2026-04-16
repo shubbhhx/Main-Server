@@ -453,6 +453,8 @@
 
     const LOAD_TIMEOUT_MS = 12000;
     const STORAGE_KEY = 'toxibhflix_player_server';
+    const WATCH_HISTORY_KEY = 'watchHistory';
+    const WATCH_HISTORY_LIMIT = 50;
 
     const state = {
       type: 'movie',
@@ -461,6 +463,7 @@
       episode: 1,
       startSeconds: 0,
       title: '',
+      poster: null,
       activeIndex: 0,
       timeoutId: null,
       tried: new Set(),
@@ -497,6 +500,100 @@
       state.startSeconds = Math.max(0, Number(params.get('start') || 0));
       const rawTitle = (params.get('title') || '').trim();
       state.title = rawTitle || (state.type === 'tv' ? `TV Show #${state.id} S${state.season}E${state.episode}` : `Movie #${state.id}`);
+      state.poster = (params.get('poster') || '').trim() || null;
+    }
+
+    function safeParseJsonArray(raw) {
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function getWatchHistory() {
+      try {
+        return safeParseJsonArray(localStorage.getItem(WATCH_HISTORY_KEY));
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function normalizeHistoryItem(item) {
+      if (!item || !item.id) return null;
+      const type = String(item.type || 'movie').toLowerCase() === 'tv' ? 'tv' : 'movie';
+      return {
+        id: String(item.id),
+        title: String(item.title || '').trim() || (type === 'tv' ? `TV Show #${item.id}` : `Movie #${item.id}`),
+        poster: item.poster || null,
+        type,
+        timestamp: Number(item.timestamp || Date.now()),
+        season: type === 'tv' ? Math.max(1, Number(item.season || 1)) : null,
+        episode: type === 'tv' ? Math.max(1, Number(item.episode || 1)) : null
+      };
+    }
+
+    function emitHistoryUpdated(item) {
+      try {
+        window.dispatchEvent(new CustomEvent('toxibhflix:history-updated', { detail: item }));
+      } catch (err) {}
+    }
+
+    function saveToHistory(item) {
+      const normalized = normalizeHistoryItem(item);
+      if (!normalized) return;
+
+      try {
+        let history = getWatchHistory();
+        history = history.filter((h) => !(String(h.id) === normalized.id && String(h.type || 'movie') === normalized.type));
+        history.unshift(normalized);
+        history = history.slice(0, WATCH_HISTORY_LIMIT);
+        localStorage.setItem(WATCH_HISTORY_KEY, JSON.stringify(history));
+        emitHistoryUpdated(normalized);
+      } catch (err) {
+        console.warn('Failed to save watch history:', err);
+      }
+    }
+
+    let historySaveTimer = null;
+    function saveToHistoryDebounced(item, delay = 180) {
+      if (historySaveTimer) clearTimeout(historySaveTimer);
+      historySaveTimer = setTimeout(() => saveToHistory(item), delay);
+    }
+
+    function saveCurrentPlaybackToHistory() {
+      if (!state.id) return;
+      saveToHistoryDebounced({
+        id: state.id,
+        title: state.title,
+        poster: state.poster,
+        type: state.type,
+        timestamp: Date.now(),
+        season: state.type === 'tv' ? state.season : null,
+        episode: state.type === 'tv' ? state.episode : null
+      });
+    }
+
+    function updatePlayerUrl(usePushState = false) {
+      if (!state.id) return;
+      const params = new URLSearchParams();
+      params.set('type', state.type);
+      params.set('id', String(state.id));
+      if (state.type === 'tv') {
+        params.set('season', String(state.season || 1));
+        params.set('episode', String(state.episode || 1));
+      }
+      if (state.title) params.set('title', state.title);
+      if (state.poster) params.set('poster', state.poster);
+
+      const query = `?${params.toString()}`;
+      if (usePushState) {
+        window.history.pushState({}, '', query);
+      } else {
+        window.history.replaceState({}, '', query);
+      }
     }
 
     function getPrimaryServerIndex() {
@@ -679,6 +776,8 @@
         btn.addEventListener('click', () => {
           state.episode = Number(ep.episode_number) || 1;
           state.startSeconds = 0;
+          updatePlayerUrl(true);
+          saveCurrentPlaybackToHistory();
           renderEpisodeList();
           updatePlayerTitle();
           state.tried = new Set([getPrimaryServerIndex()]);
@@ -714,6 +813,8 @@
         if (!validEpisode) {
           state.episode = state.episodes.length ? Number(state.episodes[0].episode_number) : 1;
         }
+        updatePlayerUrl(false);
+        saveCurrentPlaybackToHistory();
         renderEpisodeList();
         updatePlayerTitle();
       } catch (err) {
@@ -787,6 +888,27 @@
         state.tried = new Set([getPrimaryServerIndex()]);
         loadServer(getPrimaryServerIndex(), false);
       });
+
+      window.addEventListener('popstate', async () => {
+        const previousKey = `${state.type}:${state.id}:${state.season}:${state.episode}`;
+        parseParams();
+        if (!state.id) return;
+
+        const nextKey = `${state.type}:${state.id}:${state.season}:${state.episode}`;
+        if (previousKey === nextKey) return;
+
+        if (state.type === 'tv') {
+          await initTvPanel();
+        } else {
+          initMovieMode();
+        }
+
+        updatePlayerTitle();
+        saveCurrentPlaybackToHistory();
+        const preferred = getPreferredServerIndex();
+        state.tried = new Set([preferred]);
+        loadServer(preferred, false);
+      });
     }
 
     async function boot() {
@@ -806,9 +928,11 @@
         await initTvPanel();
       } else {
         initMovieMode();
+        updatePlayerUrl(false);
       }
 
       updatePlayerTitle();
+      saveCurrentPlaybackToHistory();
       const preferred = getPreferredServerIndex();
       state.tried = new Set([preferred]);
       loadServer(preferred, false);
