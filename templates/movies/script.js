@@ -18,6 +18,10 @@ const isTVMode = isFlixRoute && (_CURRENT_URL.includes('flix') || isTVBrowser);
 
 window.isTVMode = isTVMode;
 
+if (document.referrer.includes("portfolio")) {
+  location.reload();
+}
+
 if (isFlixRoute) {
   const applyTVModeClass = () => {
     if (document.body) {
@@ -51,6 +55,23 @@ const _pendingProgressPayloads = {};
 // ═══════════════════════════════════════════════════════════
 //  UNIVERSAL PLAYER NAVIGATION (Core Navigation System)
 // ═══════════════════════════════════════════════════════════
+function requireProfileAndRedirect(target) {
+  window.isNavigating = false; // FORCE RESET (IMPORTANT)
+  const profile = localStorage.getItem('toxibhflix_profile');
+  console.log("NAV CLICK", target);
+  console.log('Profile:', profile);
+
+  if (!profile) {
+    localStorage.setItem('redirectAfterProfile', target);
+    window.location.replace('/movies/profiles?t=' + Date.now());
+    return false;
+  }
+
+  const separator = target.includes('?') ? '&' : '?';
+  window.location.replace(target + separator + 't=' + Date.now());
+  return false;
+}
+
 function openPlayer(type, id, season = 1, episode = 1) {
   console.log('Playing:', type, id, season, episode);
   
@@ -3786,58 +3807,37 @@ async function initHomePage() {
   initGenres('movie');
 
   try {
-    // Load continue watching first
-    await loadContinueWatchingRow('row-continue', 'row-continue-section');
-
-    // Load trending movies
     showSkeletons('row-trending-movies');
-    try {
-      const trendingMovies = await tmdb('/trending/movie/week');
-      renderRow(trendingMovies.results, 'row-trending-movies');
-    } catch (e) {
-      const c = document.getElementById('row-trending-movies');
-      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
-    }
-
-    // Load trending TV shows
     showSkeletons('row-trending-tv');
-    try {
-      const trendingTV = await tmdb('/trending/tv/week');
-      renderRow(trendingTV.results, 'row-trending-tv');
-    } catch (e) {
-      const c = document.getElementById('row-trending-tv');
-      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
-    }
-
-    // Load top rated movies
     showSkeletons('row-toprated');
-    try {
-      const topRated = await tmdb('/movie/top_rated');
-      renderRow(topRated.results, 'row-toprated');
-    } catch (e) {
-      const c = document.getElementById('row-toprated');
-      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
-    }
-
-    // Load popular
     showSkeletons('row-popular');
-    try {
-      const popular = await tmdb('/movie/popular');
-      renderRow(popular.results, 'row-popular');
-    } catch (e) {
-      const c = document.getElementById('row-popular');
-      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
-    }
 
-    // Load hero banner with featured trending movie
-    try {
-      const trending = await tmdb('/trending/movie/week');
-      const featured = trending.results.find(m => m.backdrop_path) || trending.results[0];
-      if (featured) setHero(featured);
-    } catch (e) { }
-
-    // Load recommended
-    await loadRecommendationsRow('row-recommended', 'movie');
+    await Promise.all([
+      loadContinueWatchingRow('row-continue', 'row-continue-section'),
+      tmdb('/trending/movie/week').then(data => renderRow(data.results, 'row-trending-movies')).catch(e => {
+        const c = document.getElementById('row-trending-movies');
+        if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+      }),
+      tmdb('/trending/tv/week').then(data => renderRow(data.results, 'row-trending-tv')).catch(e => {
+        const c = document.getElementById('row-trending-tv');
+        if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+      }),
+      tmdb('/movie/top_rated').then(data => renderRow(data.results, 'row-toprated')).catch(e => {
+        const c = document.getElementById('row-toprated');
+        if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+      }),
+      tmdb('/movie/popular').then(data => renderRow(data.results, 'row-popular')).catch(e => {
+        const c = document.getElementById('row-popular');
+        if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+      }),
+      tmdb('/trending/movie/week').then(trending => {
+        const featured = trending.results.find(m => m.backdrop_path) || trending.results[0];
+        if (featured) setHero(featured);
+      }).catch(e => {}),
+      loadRecommendationsRow('row-recommended', 'movie')
+    ]);
+  } catch (e) {
+    console.error('Homepage load error:', e);
   } finally {
     hideThemeLoader();
   }

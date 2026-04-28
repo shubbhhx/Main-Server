@@ -23,6 +23,59 @@
     height: 80vh;
     max-height: 800px;
   }
+  /* ── App loader overlay ── */
+  #app-loader {
+    position: fixed;
+    inset: 0;
+    background: #020617;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    flex-direction: column;
+    gap: 16px;
+    transition: opacity 0.4s ease;
+  }
+  #app-loader.hidden { opacity: 0; pointer-events: none; }
+  #app-loader-text {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(18px, 3vw, 28px);
+    color: #00f0ff;
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 20px rgba(0,240,255,0.6);
+    animation: loaderPulse 1.2s ease-in-out infinite alternate;
+  }
+  #app-loader-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: rgba(0,240,255,0.45);
+    text-transform: uppercase;
+  }
+  #app-loader-bar {
+    width: min(260px, 60vw);
+    height: 2px;
+    background: rgba(0,240,255,0.15);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #app-loader-bar::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 40%;
+    background: #00f0ff;
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(0,240,255,0.7);
+    animation: loaderScan 1.4s ease-in-out infinite;
+  }
+  @keyframes loaderPulse {
+    from { opacity: 0.7; } to { opacity: 1; }
+  }
+  @keyframes loaderScan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
 </style>
 <title>ToxibhFlix — Home</title>
 <meta name="description" content="ToxibhFlix — Netflix-style streaming platform with movies, TV shows, and more.">
@@ -32,15 +85,22 @@
 </head>
 <body>
 
+<!-- APP LOADER OVERLAY -->
+<div id="app-loader">
+  <div id="app-loader-text">TOXIBHFLIX</div>
+  <div id="app-loader-bar"></div>
+  <div id="app-loader-sub">Loading stream catalog...</div>
+</div>
+
 <!-- HEADER -->
 <header id="site-header">
   <div class="header-left">
     <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Open navigation">☰</button>
     <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
     <nav class="header-nav">
-      <a href="/movies" class="active">🏠 Home</a>
-      <a href="#" onclick="handleMoviesClick();return false;">🎬 Movies</a>
-      <a href="#" onclick="handleTVClick();return false;">📺 TV Shows</a>
+      <a href="#" onclick="return requireProfileAndRedirect('/movies')" class="active">🏠 Home</a>
+      <a href="#" onclick="return requireProfileAndRedirect('/movies/browse')">🎬 Movies</a>
+      <a href="#" onclick="return requireProfileAndRedirect('/movies/tvshows')">📺 TV Shows</a>
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:16px;">
@@ -137,13 +197,13 @@
     <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Close navigation">✕</button>
   </div>
   <div class="sidebar-nav">
-    <a class="sidebar-link active" href="/movies">
+    <a class="sidebar-link active" href="#" onclick="return requireProfileAndRedirect('/movies')">
       <span class="sidebar-icon">🏠</span> Home
     </a>
-    <a class="sidebar-link" href="#" onclick="handleMoviesClick();return false;">
+    <a class="sidebar-link" href="#" onclick="return requireProfileAndRedirect('/movies/browse')">
       <span class="sidebar-icon">🎬</span> Movies
     </a>
-    <a class="sidebar-link" href="#" onclick="handleTVClick();return false;">
+    <a class="sidebar-link" href="#" onclick="return requireProfileAndRedirect('/movies/tvshows')">
       <span class="sidebar-icon">📺</span> TV Shows
     </a>
     <a class="sidebar-link" href="/profile">
@@ -158,30 +218,19 @@
 <script src="/movies/script.js?v=4"></script>
 <script>
   // ── Global navigation helpers ──────────────────────────────
-  function handleMoviesClick() {
-    const profile = localStorage.getItem('toxibhflix_profile');
-    if (!profile) {
-      localStorage.setItem('redirectAfterProfile', 'movies');
-      window.location.href = '/movies/profiles';
-    } else {
-      window.location.href = '/movies/browse';
-    }
-  }
 
-  function handleTVClick() {
-    const profile = localStorage.getItem('toxibhflix_profile');
-    if (!profile) {
-      localStorage.setItem('redirectAfterProfile', 'tv');
-      window.location.href = '/movies/profiles';
-    } else {
-      window.location.href = '/movies/tvshows';
-    }
-  }
 
   function switchProfile() {
     localStorage.removeItem('toxibhflix_profile');
     localStorage.removeItem('activeProfile');
     window.location.href = '/movies/profiles';
+  }
+
+  function _hideAppLoader() {
+    const loader = document.getElementById('app-loader');
+    if (!loader) return;
+    loader.classList.add('hidden');
+    setTimeout(() => { loader.style.display = 'none'; }, 420);
   }
 
   document.addEventListener('DOMContentLoaded', async function() {
@@ -194,12 +243,48 @@
 
     // Show active profile name
     const nameEl = document.getElementById('profile-name-display');
-    if (nameEl) nameEl.textContent = p.name;
+    if (nameEl) {
+      nameEl.textContent = p.name;
+      nameEl.style.cursor = 'pointer';
+
+      // 🔥 REMOVE EXISTING EVENTS (IMPORTANT)
+      const newNode = nameEl.cloneNode(true);
+      nameEl.parentNode.replaceChild(newNode, nameEl);
+
+      // 🔥 ADD CLEAN CLICK HANDLER
+      newNode.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // 🚨 BLOCK parent click
+        console.log("Profile clicked");
+
+        const profile = localStorage.getItem('toxibhflix_profile');
+        if (!profile) {
+          window.location.href = '/movies/profiles';
+          return;
+        }
+
+        window.location.href = '/profile';
+      });
+
+      newNode.addEventListener('mouseenter', () => { newNode.style.color = '#00f0ff'; newNode.style.transition = 'color 0.2s'; });
+      newNode.addEventListener('mouseleave', () => { newNode.style.color = ''; });
+    }
 
     // Prevent double initialization
     if (!window.appInitialized) {
       window.appInitialized = true;
-      await initHomePage();
+      // Delay 50ms so DOM is fully stable before rendering
+      setTimeout(async () => {
+        try {
+          await initHomePage();
+        } catch(e) {
+          console.error('Homepage load error:', e);
+        } finally {
+          _hideAppLoader();
+        }
+      }, 50);
+    } else {
+      _hideAppLoader();
     }
 
     // Auto-refresh continue watching when resume keys change (cross-tab)

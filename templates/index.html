@@ -438,7 +438,7 @@
     <a href="#certifications">Certs</a>
     <a href="#education">Education</a>
     <a href="#games">Games</a>
-    <a href="/movies/profiles" id="movies-nav-link">Movies</a>
+    <a href="#" onclick="return handleNavClick('/movies/browse')" id="movies-nav-link">Movies</a>
     <a href="/os" id="os-nav-link">Toxibh OS</a>
     <a href="#contact">Contact</a>
   </div>
@@ -1872,15 +1872,26 @@ async function submitContactForm(e) {
 </div>
 
 <script>
-function toxibhFlixTransition(e) {
-  e.preventDefault();
-  const overlay = document.getElementById('toxibhflix-overlay');
-  overlay.style.display = 'flex';
-  requestAnimationFrame(() => {
-    overlay.classList.add('active');
-    overlay.style.opacity = '1';
-    setTimeout(() => { window.location.href = '/flix'; }, 1000);
-  });
+function requireProfileAndRedirect(target) {
+  window.isNavigating = false;
+  const profile = localStorage.getItem("toxibhflix_profile");
+  console.log("NAV CLICK", target);
+  console.log("Profile:", profile);
+
+  if (!profile) {
+    localStorage.setItem("redirectAfterProfile", target);
+    window.location.replace("/movies/profiles?t=" + Date.now());
+    return false;
+  }
+
+  const separator = target.includes('?') ? '&' : '?';
+  window.location.replace(target + separator + "t=" + Date.now());
+  return false;
+}
+
+function handleNavClick(target) {
+  localStorage.setItem("lastNavClick", Date.now());
+  return requireProfileAndRedirect(target);
 }
 
 function toxibhOsTransition(e) {
@@ -1895,9 +1906,7 @@ function toxibhOsTransition(e) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  const moviesLink = document.getElementById('movies-nav-link');
   const osLink = document.getElementById('os-nav-link');
-  if (moviesLink) moviesLink.addEventListener('click', toxibhFlixTransition);
   if (osLink) osLink.addEventListener('click', toxibhOsTransition);
 });
 </script>

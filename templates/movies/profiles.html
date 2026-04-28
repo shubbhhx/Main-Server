@@ -414,6 +414,7 @@
     localStorage.removeItem('redirectAfterProfile');
     if (redirect === 'movies') return '/movies/browse';
     if (redirect === 'tv') return '/movies/tvshows';
+    if (redirect) return redirect;
     return '/movies';
   }
 
@@ -429,7 +430,7 @@
     persistActiveProfile(profileState);
     const dest = _getRedirectUrl();
     document.getElementById('flash').classList.add('on');
-    setTimeout(() => { window.location.href = dest; }, 450);
+    setTimeout(() => { window.location.replace(dest); }, 450);
   }
 
   function handleGuestLogin() {
@@ -444,7 +445,7 @@
     persistActiveProfile(guestProfile);
     const dest = _getRedirectUrl();
     document.getElementById('flash').classList.add('on');
-    setTimeout(() => { window.location.href = dest; }, 450);
+    setTimeout(() => { window.location.replace(dest); }, 450);
   }
 
   function showProfileToast(msg) {
