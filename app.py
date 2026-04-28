@@ -318,12 +318,16 @@ def admin_page():
     return send_from_directory('templates', 'admin.html')
 
 @app.route('/movies')
-def movies_page():
+def movies_home():
+    return send_from_directory('templates/movies', 'home.html')
+
+@app.route('/movies/profiles')
+def movies_profiles():
     return send_from_directory('templates/movies', 'profiles.html')
 
 @app.route('/flix')
 def flix_page():
-    return send_from_directory('templates/movies', 'profiles.html')
+    return send_from_directory('templates/movies', 'home.html')
 
 @app.route('/flix/<path:subpath>')
 def flix_subpath(subpath):
@@ -772,27 +776,40 @@ def api_movies_continue_watching():
         FROM resume_progress
         WHERE profile_id = ?
           AND timestamp > 0
-          AND progress_percent < 98
+          AND progress_percent < 90
+          AND duration > 0
         ORDER BY updated_at DESC
-        LIMIT 40
+        LIMIT 20
     ''', (profile['id'],))
 
     items = []
     for r in rows:
-        items.append({
-            'tmdbId': r.get('content_id'),
-            'mediaType': r.get('content_type'),
-            'title': r.get('title'),
-            'poster': r.get('poster'),
-            'season': r.get('season'),
-            'episode': r.get('episode'),
-            'timestamp': r.get('timestamp') or 0,
-            'duration': r.get('duration') or 0,
-            'progress': max(0.0, min(1.0, (_float_or_zero(r.get('progress_percent')) / 100.0))),
-            'savedAt': int(datetime.fromisoformat(r.get('updated_at')).timestamp() * 1000) if r.get('updated_at') else 0
-        })
+        try:
+            poster_url = r.get('poster') or ''
+            if poster_url and not poster_url.startswith('http'):
+                poster_url = 'https://image.tmdb.org/t/p/w500' + poster_url if poster_url.startswith('/') else ''
+            
+            items.append({
+                'id': r.get('content_id'),
+                'tmdbId': r.get('content_id'),
+                'type': r.get('content_type'),
+                'mediaType': r.get('content_type'),
+                'title': r.get('title') or 'Unknown Title',
+                'poster': poster_url,
+                'season': r.get('season') or 0,
+                'episode': r.get('episode') or 0,
+                'timestamp': int(r.get('timestamp') or 0),
+                'duration': int(r.get('duration') or 0),
+                'progress': max(0.0, min(1.0, (_float_or_zero(r.get('progress_percent')) / 100.0))),
+                'progress_percent': max(0, min(100, _float_or_zero(r.get('progress_percent')))),
+                'last_updated': r.get('updated_at') or '',
+                'savedAt': int(datetime.fromisoformat(r.get('updated_at')).timestamp() * 1000) if r.get('updated_at') else 0
+            })
+        except Exception as e:
+            logger.warn(f'Error processing continue watching item: {e}')
+            continue
 
-    return jsonify({'items': items})
+    return jsonify({'items': items, 'count': len(items)})
 
 @app.route('/api/movies/watchlist', methods=['GET'])
 def api_movies_watchlist_get():

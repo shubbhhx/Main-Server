@@ -409,6 +409,14 @@
     localStorage.setItem('activeProfile', JSON.stringify(profileState));
   }
 
+  function _getRedirectUrl() {
+    const redirect = localStorage.getItem('redirectAfterProfile');
+    localStorage.removeItem('redirectAfterProfile');
+    if (redirect === 'movies') return '/movies/browse';
+    if (redirect === 'tv') return '/movies/tvshows';
+    return '/movies';
+  }
+
   function handleSelectProfile(id, name, emoji, profileImage) {
     const profileState = {
       id: id || '',
@@ -419,8 +427,9 @@
       ts: Date.now()
     };
     persistActiveProfile(profileState);
+    const dest = _getRedirectUrl();
     document.getElementById('flash').classList.add('on');
-    setTimeout(() => { window.location.href = '/movies/browse'; }, 450);
+    setTimeout(() => { window.location.href = dest; }, 450);
   }
 
   function handleGuestLogin() {
@@ -433,8 +442,9 @@
       ts: Date.now()
     };
     persistActiveProfile(guestProfile);
+    const dest = _getRedirectUrl();
     document.getElementById('flash').classList.add('on');
-    setTimeout(() => { window.location.href = '/movies/browse'; }, 450);
+    setTimeout(() => { window.location.href = dest; }, 450);
   }
 
   function showProfileToast(msg) {

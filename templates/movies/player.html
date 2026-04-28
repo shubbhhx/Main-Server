@@ -439,8 +439,11 @@
 
     const VIDEO_SERVERS = [
       {
+        name: 'ScreenScape',
+        url: (id, type, s, e) => type === 'movie' ? `https://screenscape.me/embed?tmdb=${id}&type=movie` : `https://screenscape.me/embed?tmdb=${id}&type=tv&s=${s}&e=${e}`
+      },
+      {
         name: 'VidFast Pro',
-        primary: true,
         url: (id, type, s, e) => type === 'movie' ? `https://vidfast.pro/movie/${id}` : `https://vidfast.pro/tv/${id}/${s}/${e}`
       },
       {
@@ -468,7 +471,9 @@
       timeoutId: null,
       tried: new Set(),
       seasons: [],
-      episodes: []
+      episodes: [],
+      profileId: null,
+      lastSavedProgress: 0
     };
 
     const els = {
@@ -593,6 +598,108 @@
         window.history.pushState({}, '', query);
       } else {
         window.history.replaceState({}, '', query);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // SERVER-SIDE PROGRESS TRACKING
+    // ════════════════════════════════════════════════════════════════
+
+    async function fetchProfileId() {
+      try {
+        const res = await fetch('/api/profiles');
+        const data = await res.json();
+        if (data.profiles && data.profiles.length > 0) {
+          const guest = data.profiles.find(p => p.profile_name === 'Guest');
+          return guest ? guest.id : data.profiles[0].id;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch profile:', err);
+      }
+      return null;
+    }
+
+    async function loadSavedProgress() {
+      if (!state.profileId || !state.id) return;
+
+      try {
+        const params = new URLSearchParams();
+        params.set('profile_id', state.profileId);
+        params.set('content_id', state.id);
+        params.set('content_type', state.type);
+
+        const res = await fetch(`/api/movies/resume-progress?${params.toString()}`);
+        const data = await res.json();
+        const progress = data.progress;
+
+        if (progress) {
+          if (state.type === 'tv' && progress.season) {
+            state.season = progress.season;
+            state.episode = progress.episode || 1;
+          }
+          const timestamp = progress.timestamp || 0;
+          if (timestamp > 0) {
+            state.startSeconds = Math.floor(timestamp);
+            console.log(`[Resume] Loading from ${state.startSeconds}s`);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load saved progress:', err);
+      }
+    }
+
+    let saveProgressTimer = null;
+    let lastSavedTimestamp = 0;
+
+    async function saveProgressToServer() {
+      if (!state.profileId || !state.id) return;
+
+      const now = Date.now();
+      if (now - lastSavedTimestamp < 3000) return;
+
+      try {
+        const payload = {
+          profile_id: state.profileId,
+          content_id: state.id,
+          content_type: state.type,
+          title: state.title,
+          poster: state.poster || '',
+          timestamp: Math.floor(state.startSeconds),
+          duration: 0,
+          progress_percent: 0
+        };
+
+        if (state.type === 'tv') {
+          payload.season = state.season;
+          payload.episode = state.episode;
+        }
+
+        const res = await fetch('/api/movies/resume-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          lastSavedTimestamp = now;
+          state.lastSavedProgress = state.startSeconds;
+        }
+      } catch (err) {
+        console.warn('Failed to save progress:', err);
+      }
+    }
+
+    function startAutoSaveTimer() {
+      if (saveProgressTimer) clearInterval(saveProgressTimer);
+      saveProgressTimer = setInterval(() => {
+        saveProgressToServer();
+      }, 5000);
+    }
+
+    function stopAutoSaveTimer() {
+      if (saveProgressTimer) {
+        clearInterval(saveProgressTimer);
+        saveProgressTimer = null;
       }
     }
 
@@ -778,6 +885,7 @@
           state.startSeconds = 0;
           updatePlayerUrl(true);
           saveCurrentPlaybackToHistory();
+          saveProgressToServer();
           renderEpisodeList();
           updatePlayerTitle();
           state.tried = new Set([getPrimaryServerIndex()]);
@@ -815,6 +923,7 @@
         }
         updatePlayerUrl(false);
         saveCurrentPlaybackToHistory();
+        saveProgressToServer();
         renderEpisodeList();
         updatePlayerTitle();
       } catch (err) {
@@ -916,6 +1025,12 @@
       initActions();
       renderServerButtons();
 
+      // Load profile and saved progress
+      state.profileId = await fetchProfileId();
+      if (state.profileId) {
+        await loadSavedProgress();
+      }
+
       if (!state.id) {
         showLoading(false);
         showError(true);
@@ -933,9 +1048,14 @@
 
       updatePlayerTitle();
       saveCurrentPlaybackToHistory();
+      // Always default to ScreenScape (index 0) — clear any stale saved preference
+      localStorage.removeItem(STORAGE_KEY);
       const preferred = getPreferredServerIndex();
       state.tried = new Set([preferred]);
       loadServer(preferred, false);
+      
+      // Start auto-saving progress
+      startAutoSaveTimer();
     }
 
     boot();

@@ -406,15 +406,15 @@
   }
 
   function toWatchUrl(item) {
-    const type = item.type || item.mediaType || item.content_type || item.media_type || 'movie';
+    const type = (item.type || item.mediaType || item.content_type || item.media_type || 'movie').toLowerCase();
     const id = item.tmdbId || item.content_id || item.id;
-    if (!id) return '/movies';
+    if (!id) return '#';
     if (type === 'tv') {
       const s = Math.max(1, Number(item.season || 1));
       const e = Math.max(1, Number(item.episode || 1));
-      return `/movies/watch-tv?id=${id}&s=${s}&e=${e}`;
+      return `javascript:openPlayer('tv','${id}',${s},${e})`;
     }
-    return `/movies/watch.html?id=${id}`;
+    return `javascript:openPlayer('movie','${id}')`;
   }
 
   function renderResume(items) {
@@ -428,11 +428,15 @@
     row.innerHTML = items.slice(0, 20).map(item => {
       const title = item.title || 'Untitled';
       const poster = _dashPoster(item.poster);
-      const sub = item.type === 'tv'
+      const type = (item.type || item.content_type || 'movie').toLowerCase();
+      const sub = type === 'tv'
         ? `TV • S${item.season || 1}E${item.episode || 1}`
         : 'Movie';
+      const clickHandler = type === 'tv'
+        ? `openPlayer('tv','${item.id}',${item.season || 1},${item.episode || 1})`
+        : `openPlayer('movie','${item.id}')`;
       return `
-        <article class="dash-card" onclick="window.location.href='${toWatchUrl(item)}'">
+        <article class="dash-card" onclick="${clickHandler}" style="cursor:pointer;">
           <img src="${poster}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='${DASH_FALLBACK_POSTER}'">
           <div class="dash-card-meta">
             <div class="dash-card-title">${title}</div>
@@ -451,15 +455,15 @@
     }
 
     grid.innerHTML = items.slice(0, 24).map(item => {
-      const type = item.content_type || item.media_type || (item.title ? 'movie' : 'tv');
+      const type = (item.content_type || item.media_type || 'movie').toLowerCase();
       const title = item.title || item.name || 'Untitled';
       const year = ((item.release_date || item.first_air_date || '') + '').slice(0, 4) || '—';
       const poster = _dashPoster(item.poster || item.poster_path || null);
-      const nav = type === 'tv'
-        ? `/movies/watch-tv?id=${item.content_id || item.id}`
-        : `/movies/watch.html?id=${item.content_id || item.id}`;
+      const clickHandler = type === 'tv'
+        ? `openPlayer('tv','${item.content_id || item.id}')`
+        : `openPlayer('movie','${item.content_id || item.id}')`;
       return `
-        <article class="dash-card" onclick="window.location.href='${nav}'">
+        <article class="dash-card" onclick="${clickHandler}" style="cursor:pointer;">
           <span class="badge">${type.toUpperCase()}</span>
           <img src="${poster}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='${DASH_FALLBACK_POSTER}'">
           <div class="dash-card-meta">

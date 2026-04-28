@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    transform: none !important;
+    zoom: 1 !important;
+  }
+  body {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  body.loaded {
+    opacity: 1;
+  }
+  #hero-banner {
+    width: 100%;
+    height: 80vh;
+    max-height: 800px;
+  }
+</style>
+<title>ToxibhFlix — Home</title>
+<meta name="description" content="ToxibhFlix — Netflix-style streaming platform with movies, TV shows, and more.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎬%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/movies/theme.css">
+<link rel="stylesheet" href="/movies/style.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header id="site-header">
+  <div class="header-left">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Open navigation">☰</button>
+    <a class="logo" href="/movies">TOXIBH<span>FLIX</span></a>
+    <nav class="header-nav">
+      <a href="/movies" class="active">🏠 Home</a>
+      <a href="#" onclick="handleMoviesClick();return false;">🎬 Movies</a>
+      <a href="#" onclick="handleTVClick();return false;">📺 TV Shows</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="search-wrapper">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search movies or shows..." autocomplete="off" spellcheck="false">
+    </div>
+    <a href="#" onclick="switchProfile();return false;" class="back-btn" id="profile-btn" style="display:flex;align-items:center;gap:8px;">👤 <span id="profile-name-display">Switch</span></a>
+    <a href="/" class="back-btn">← Portfolio</a>
+  </div>
+</header>
+<section id="hero-banner">
+  <div class="hero-backdrop" id="hero-backdrop"></div>
+  <div class="hero-vignette"></div>
+  <div class="hero-vignette-side"></div>
+  <div class="hero-floating-controls">
+    <button type="button" class="hero-audio-btn" id="hero-audio-toggle" aria-label="Unmute trailer" title="Unmute trailer" style="display:none;">🔇</button>
+  </div>
+  <div class="hero-content">
+    <div class="hero-content-anchor">
+    <h1 class="hero-title" id="hero-title">Loading…</h1>
+    <div class="hero-meta" id="hero-meta"></div>
+    <p class="hero-desc" id="hero-desc"></p>
+    <div class="hero-actions">
+      <a class="btn-play" id="hero-watch" href="#">▶&nbsp;&nbsp;WATCH NOW</a>
+      <button class="btn-info" id="hero-info" onclick="if(document.getElementById('hero-watch').href&&document.getElementById('hero-watch').href!=='#')window.location.href=document.getElementById('hero-watch').href">ℹ&nbsp;&nbsp;MORE INFO</button>
+    </div>
+    </div>
+  </div>
+</section>
+
+<!-- MAIN CONTENT -->
+<main id="main-content">
+
+  <!-- Search results (hidden unless searching) -->
+  <section id="search-section">
+    <div class="search-section-title" id="search-label">Results for <span></span></div>
+    <div class="search-grid" id="search-grid"></div>
+  </section>
+
+  <!-- Browse rows -->
+  <div id="browse-section">
+
+    <!-- Continue Watching (mixed movies + TV) -->
+    <div class="row-section" id="row-continue-section" style="display:none;">
+      <div class="row-title">▶ Continue Watching</div>
+      <div class="poster-row" id="row-continue"></div>
+    </div>
+
+    <!-- Trending Movies -->
+    <div class="row-section" id="row-trending-movies-section">
+      <div class="row-title">🎬 Trending Movies</div>
+      <div class="poster-row" id="row-trending-movies"></div>
+    </div>
+
+    <!-- Trending TV Shows -->
+    <div class="row-section" id="row-trending-tv-section">
+      <div class="row-title">📺 Trending TV Shows</div>
+      <div class="poster-row" id="row-trending-tv"></div>
+    </div>
+
+    <!-- Top Rated -->
+    <div class="row-section" id="row-toprated-section">
+      <div class="row-title">⭐ Top Rated</div>
+      <div class="poster-row" id="row-toprated"></div>
+    </div>
+
+    <!-- Popular -->
+    <div class="row-section" id="row-popular-section">
+      <div class="row-title">🔥 Popular</div>
+      <div class="poster-row" id="row-popular"></div>
+    </div>
+
+    <!-- Recommended -->
+    <div class="row-section" id="row-recommended-section">
+      <div class="row-title">✨ Recommended For You</div>
+      <div class="poster-row" id="row-recommended"></div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- SIDEBAR OVERLAY -->
+<div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar" role="navigation" aria-label="Site navigation">
+  <div class="sidebar-header">
+    <span class="sidebar-logo">TOXIBHFLIX</span>
+    <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Close navigation">✕</button>
+  </div>
+  <div class="sidebar-nav">
+    <a class="sidebar-link active" href="/movies">
+      <span class="sidebar-icon">🏠</span> Home
+    </a>
+    <a class="sidebar-link" href="#" onclick="handleMoviesClick();return false;">
+      <span class="sidebar-icon">🎬</span> Movies
+    </a>
+    <a class="sidebar-link" href="#" onclick="handleTVClick();return false;">
+      <span class="sidebar-icon">📺</span> TV Shows
+    </a>
+    <a class="sidebar-link" href="/profile">
+      <span class="sidebar-icon">👤</span> Profiles
+    </a>
+    <a class="sidebar-link" href="/">
+      <span class="sidebar-icon">←</span> Portfolio
+    </a>
+  </div>
+</nav>
+
+<script src="/movies/script.js?v=4"></script>
+<script>
+  // ── Global navigation helpers ──────────────────────────────
+  function handleMoviesClick() {
+    const profile = localStorage.getItem('toxibhflix_profile');
+    if (!profile) {
+      localStorage.setItem('redirectAfterProfile', 'movies');
+      window.location.href = '/movies/profiles';
+    } else {
+      window.location.href = '/movies/browse';
+    }
+  }
+
+  function handleTVClick() {
+    const profile = localStorage.getItem('toxibhflix_profile');
+    if (!profile) {
+      localStorage.setItem('redirectAfterProfile', 'tv');
+      window.location.href = '/movies/profiles';
+    } else {
+      window.location.href = '/movies/tvshows';
+    }
+  }
+
+  function switchProfile() {
+    localStorage.removeItem('toxibhflix_profile');
+    localStorage.removeItem('activeProfile');
+    window.location.href = '/movies/profiles';
+  }
+
+  document.addEventListener('DOMContentLoaded', async function() {
+    // Check for active profile - redirect to profiles if none selected
+    const p = JSON.parse(localStorage.getItem('toxibhflix_profile') || 'null');
+    if (!p) {
+      window.location.href = '/movies/profiles';
+      return;
+    }
+
+    // Show active profile name
+    const nameEl = document.getElementById('profile-name-display');
+    if (nameEl) nameEl.textContent = p.name;
+
+    // Prevent double initialization
+    if (!window.appInitialized) {
+      window.appInitialized = true;
+      await initHomePage();
+    }
+
+    // Auto-refresh continue watching when resume keys change (cross-tab)
+    window.addEventListener('storage', (ev) => {
+      try {
+        if (!ev.key) return;
+        if (ev.key.startsWith('toxibhflix_resume_')) {
+          if (typeof loadContinueWatchingRow === 'function') {
+            loadContinueWatchingRow('row-continue', 'row-continue-section');
+          }
+        }
+      } catch (e) { /* ignore */ }
+    });
+  });
+
+  // Fade in body after full load + force layout recalculation
+  window.addEventListener('load', () => {
+    document.body.classList.add('loaded');
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 100);
+    // Smooth scroll to hash if present
+    if (window.location.hash) {
+      const target = document.querySelector(window.location.hash);
+      if (target) target.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  function renderHomeRow(items, containerId, mediaType = 'movie') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    if (!items || items.length === 0) {
+      container.innerHTML = '<p style="color:var(--nf-muted);font-family: Share Tech Mono,monospace;font-size:0.7rem;">No content available.</p>';
+      return;
+    }
+
+    items.forEach(item => {
+      const card = buildHomeCard(item, mediaType);
+      if (card) container.appendChild(card);
+    });
+  }
+
+  function buildHomeCard(item, mediaType = 'movie') {
+    const card = document.createElement('div');
+    card.className = 'poster-card';
+    card.dataset.id = item.id;
+    card.dataset.type = mediaType;
+
+    const title = mediaType === 'tv' ? (item.name || item.title) : item.title;
+    const imgSrc = mediaType === 'tv' ? 
+      (item.poster_path ? posterUrl(item.poster_path) : FALLBACK_POSTER) :
+      (item.poster_path ? posterUrl(item.poster_path) : FALLBACK_POSTER);
+    const rating = item.vote_average ? item.vote_average.toFixed(1) : 'N/A';
+    const year = mediaType === 'tv' 
+      ? (item.first_air_date || '').slice(0, 4) || '—'
+      : (item.release_date || '').slice(0, 4) || '—';
+
+    card.innerHTML = `
+      <div class="rating-badge">★ ${rating}</div>
+      <div class="poster-play-btn">▶</div>
+      <img class="poster-img" src="${imgSrc}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">
+      <div class="preview-container">
+        <video class="preview-video" muted loop></video>
+        <div class="preview-info">
+          <h3 class="preview-title">${title}</h3>
+          <button class="preview-play-btn">▶ PLAY</button>
+        </div>
+      </div>
+      <div class="poster-overlay">
+        <div class="poster-title">${title}</div>
+        <div class="poster-meta">
+          <span class="poster-rating">★ ${rating}</span>
+          <span>${year}</span>
+        </div>
+        <div class="poster-play-btn" style="margin-top:8px;">▶ ${mediaType === 'tv' ? 'Watch Now' : 'Play'}</div>
+      </div>`;
+
+    card.addEventListener('mouseenter', () => startPreview(card, item));
+    card.addEventListener('mouseleave', () => stopPreview(card, item));
+    card.addEventListener('click', () => {
+      openPlayer(mediaType, item.id, item.season || 1, item.episode || 1);
+    });
+
+    return card;
+  }
+
+  function setHero(movie) {
+    if (!movie) return;
+    const backdrop = document.getElementById('hero-backdrop');
+    const title = document.getElementById('hero-title');
+    const meta = document.getElementById('hero-meta');
+    const desc = document.getElementById('hero-desc');
+    const watchBtn = document.getElementById('hero-watch');
+
+    if (backdrop && movie.backdrop_path) {
+      backdrop.style.backgroundImage = `url('${backdropUrl(movie.backdrop_path, 'w1280')}')`;
+    }
+
+    if (title) title.textContent = movie.title || 'Featured Content';
+    
+    if (meta) {
+      const year = (movie.release_date || '').slice(0, 4) || '';
+      const rating = movie.vote_average ? `★ ${movie.vote_average.toFixed(1)}` : '';
+      meta.innerHTML = `<span>${year}</span> <span>${rating}</span>`;
+    }
+
+    if (desc) desc.textContent = movie.overview || 'Check out this amazing content';
+    
+    if (watchBtn) {
+      watchBtn.href = '#';
+      watchBtn.onclick = (e) => {
+        e.preventDefault();
+        openPlayer('movie', movie.id);
+      };
+    }
+  }
+</script>
+</body>
+</html>

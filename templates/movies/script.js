@@ -48,6 +48,42 @@ const _posterCache = {};
 const _progressFlushTimers = {};
 const _pendingProgressPayloads = {};
 
+// ═══════════════════════════════════════════════════════════
+//  UNIVERSAL PLAYER NAVIGATION (Core Navigation System)
+// ═══════════════════════════════════════════════════════════
+function openPlayer(type, id, season = 1, episode = 1) {
+  console.log('Playing:', type, id, season, episode);
+  
+  if (!type || !id) {
+    console.error('Invalid content type or id');
+    alert('Invalid content type');
+    return;
+  }
+  
+  type = String(type).toLowerCase();
+  id = String(id).trim();
+  
+  if (type === 'tv') {
+    season = Math.max(1, parseInt(season) || 1);
+    episode = Math.max(1, parseInt(episode) || 1);
+    window.location.href = `/movies/watch-tv?type=tv&id=${id}&season=${season}&episode=${episode}`;
+  } else if (type === 'movie') {
+    window.location.href = `/movies/watch.html?type=movie&id=${id}`;
+  } else {
+    console.error('Unknown type:', type);
+    alert('Invalid content type');
+  }
+}
+
+function resumePlayback(item) {
+  if (!item) return;
+  const type = (item.type || item.content_type || item.mediaType || 'movie').toLowerCase();
+  const id = item.id || item.content_id || item.tmdbId;
+  const season = item.season || 1;
+  const episode = item.episode || 1;
+  openPlayer(type, id, season, episode);
+}
+
 // ── PORTFOLIO THEME FX (BG + LOADER) ─────────────────────────
 function ensureThemeEffects() {
   if (_themeReady) return;
@@ -693,7 +729,40 @@ function buildPosterCard(movie) {
     </div>`;
 
   card.addEventListener('click', () => {
-    window.location.href = `/movies/watch.html?id=${movie.id}`;
+    openPlayer('movie', movie.id);
+  });
+
+  return card;
+}
+
+// ── UNIVERSAL POSTER CARD BUILDER ──────────────────────────
+function buildUniversalCard(item) {
+  // Detect media type from item structure
+  const isTV = item.media_type === 'tv' || !!item.first_air_date || !item.release_date;
+  const title = item.title || item.name || 'Unknown';
+  const year = (isTV ? (item.first_air_date || '') : (item.release_date || '')).slice(0, 4) || '—';
+  const rating = item.vote_average ? item.vote_average.toFixed(1) : 'N/A';
+  
+  const card = document.createElement('div');
+  card.className = 'poster-card';
+  card.dataset.id = item.id;
+  card.dataset.type = isTV ? 'tv' : 'movie';
+
+  const imgSrc = posterUrl(item.poster_path);
+  card.innerHTML = `
+    <div class="rating-badge">★ ${rating}</div>
+    <div class="poster-play-btn">▶</div>
+    <img class="poster-img" src="${imgSrc}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">
+    <div class="poster-overlay">
+      <div class="poster-title">${title}</div>
+      <div class="poster-meta">
+        <span class="poster-rating">★ ${rating}</span>
+        <span>${year}</span>
+      </div>
+    </div>`;
+
+  card.addEventListener('click', () => {
+    openPlayer(isTV ? 'tv' : 'movie', item.id);
   });
 
   return card;
@@ -708,7 +777,10 @@ function renderRow(movies, containerId) {
     container.innerHTML = '<p style="color:var(--nf-muted);font-family: Share Tech Mono,monospace;font-size:0.7rem;">No results found.</p>';
     return;
   }
-  movies.forEach(m => container.appendChild(buildPosterCard(m)));
+  movies.forEach(m => {
+    const card = buildUniversalCard(m);
+    if (card) container.appendChild(card);
+  });
 }
 
 // ── SKELETONS ────────────────────────────────────────────────
@@ -1762,9 +1834,8 @@ function renderSearchOverlayResults(results = [], genreMap = {}) {
 
     row.addEventListener('click', () => {
       closeSearchOverlay();
-      window.location.href = item.media_type === 'tv'
-        ? `/movies/watch-tv?id=${item.id}`
-        : `/movies/watch.html?id=${item.id}`;
+      const type = (item.media_type === 'tv') ? 'tv' : 'movie';
+      openPlayer(type, item.id);
     });
 
     box.appendChild(row);
@@ -1823,6 +1894,9 @@ async function initIndexPage() {
   rows.forEach(r => showSkeletons(r.id));
 
   try {
+    // Load continue watching first
+    await loadContinueWatchingRow('row-continue', 'row-continue-section');
+
     await Promise.all(rows.map(async ({ id, path }) => {
       try {
         const data = await tmdb(path);
@@ -1880,7 +1954,10 @@ function setHero(movie) {
     hmeta.innerHTML = `<span class="hero-rating">★ ${rating}</span><span>${year}</span><span>TMDB Featured</span>`;
   }
   if (hdesc) hdesc.textContent = movie.overview;
-  if (hwatch) hwatch.href = `/movies/watch.html?id=${movie.id}`;
+  if (hwatch) {
+    hwatch.href = '#';
+    hwatch.onclick = (e) => { e.preventDefault(); openPlayer('movie', movie.id); };
+  }
   fetchHeroTrailer(movie.id, 'movie');
 }
 
@@ -1927,7 +2004,16 @@ async function initWatchPage() {
   initCinematicIdleMode();
   initTVModeEnhancements();
   const params = new URLSearchParams(window.location.search);
+  const type = (params.get('type') || 'movie').toLowerCase();
   const movieId = params.get('id');
+
+  // Redirect TV requests to watch-tv page
+  if (type === 'tv' && movieId) {
+    const season = params.get('season') || '1';
+    const episode = params.get('episode') || '1';
+    window.location.href = `/movies/watch-tv?type=tv&id=${movieId}&season=${season}&episode=${episode}`;
+    return;
+  }
 
   if (!movieId) {
     document.title = 'Movie Not Found — Cinematic';
@@ -2145,7 +2231,7 @@ function renderWatchRecommendations(movies, containerId) {
       </div>`;
 
     card.addEventListener('click', () => {
-      window.location.href = `/movies/watch.html?id=${movie.id}`;
+      openPlayer('movie', movie.id);
     });
 
     container.appendChild(card);
@@ -2422,8 +2508,12 @@ function loadPlayer(movieId, startSeconds = 0) {
 //  CONTINUE WATCHING ROW
 // ═══════════════════════════════════════════════════════════
 function buildContinueCard(item) {
+  if (!item || !item.tmdbId) return null;
+
   const card = document.createElement('div');
   card.className = 'poster-card continue-card';
+  card.setAttribute('data-id', item.tmdbId);
+  card.setAttribute('data-type', item.mediaType || 'movie');
 
   const imgSrc = normalizePosterValue(item.poster || null);
   const title = item.title || 'Unknown';
@@ -2449,14 +2539,25 @@ function buildContinueCard(item) {
     </div>`;
 
   card.addEventListener('click', () => {
-    if (item.mediaType === 'tv') {
-      window.location.href = `/movies/watch-tv?id=${item.tmdbId}&s=${item.season || 1}&e=${item.episode || 1}&resume=1`;
-    } else {
-      window.location.href = `/movies/watch.html?id=${item.tmdbId}`;
-    }
+    resumePlayback(item);
   });
 
   return card;
+}
+
+function resumePlayback(item) {
+  if (!item || !item.tmdbId) return;
+  
+  const mediaType = item.mediaType || item.type || 'movie';
+  const timestamp = parseInt(item.timestamp) || 0;
+  
+  if (mediaType === 'tv') {
+    const season = parseInt(item.season) || 1;
+    const episode = parseInt(item.episode) || 1;
+    window.location.href = `/movies/watch-tv?id=${item.tmdbId}&s=${season}&e=${episode}`;
+  } else {
+    window.location.href = `/movies/watch.html?id=${item.tmdbId}`;
+  }
 }
 
 function loadContinueWatching(containerId) {
@@ -2470,18 +2571,34 @@ function loadContinueWatching(containerId) {
   }
 
   (async () => {
-    const serverItems = await getServerContinueWatching();
-    const fallbackItems = getContinueWatching();
-    const items = (serverItems && serverItems.length) ? serverItems : fallbackItems;
+    try {
+      const serverItems = await getServerContinueWatching();
+      const fallbackItems = getContinueWatching();
+      const items = (serverItems && serverItems.length > 0) ? serverItems : fallbackItems;
 
-    if (!items || items.length === 0) {
+      if (!items || items.length === 0) {
+        if (section) section.style.display = 'none';
+        return;
+      }
+
+      // Build cards and filter out null values
+      const cards = items
+        .slice(0, 20)
+        .map(item => buildContinueCard(item))
+        .filter(card => card !== null);
+
+      if (cards.length === 0) {
+        if (section) section.style.display = 'none';
+        return;
+      }
+
+      if (section) section.style.display = 'block';
+      container.innerHTML = '';
+      cards.forEach(card => container.appendChild(card));
+    } catch (e) {
+      console.error('Error loading continue watching:', e);
       if (section) section.style.display = 'none';
-      return;
     }
-
-    if (section) section.style.display = 'block';
-    container.innerHTML = '';
-    items.slice(0, 20).forEach(item => container.appendChild(buildContinueCard(item)));
   })();
 }
 
@@ -2513,7 +2630,7 @@ function buildTVCard(show) {
     </div>`;
 
   card.addEventListener('click', () => {
-    window.location.href = `/movies/watch-tv?id=${show.id}`;
+    openPlayer('tv', show.id);
   });
 
   return card;
@@ -2752,7 +2869,14 @@ async function initWatchTVPage() {
   initCinematicIdleMode();
   initTVModeEnhancements();
   const params = new URLSearchParams(window.location.search);
+  const type = (params.get('type') || 'tv').toLowerCase();
   const showId = params.get('id');
+
+  // Redirect non-TV requests back to movie watch page
+  if (type !== 'tv') {
+    window.location.href = `/movies/watch.html?type=movie&id=${showId}`;
+    return;
+  }
 
   if (!showId) {
     document.title = 'Show Not Found — ToxibhFlix';
@@ -2769,8 +2893,9 @@ async function initWatchTVPage() {
   }
 
   // Defaults: check URL params for direct season/episode links
-  let defaultSeason  = parseInt(params.get('s') || '1', 10) || 1;
-  let defaultEpisode = parseInt(params.get('e') || '1', 10) || 1;
+  // Support both old format (s=1&e=1) and new format (season=1&episode=1)
+  let defaultSeason  = parseInt(params.get('season') || params.get('s') || '1', 10) || 1;
+  let defaultEpisode = parseInt(params.get('episode') || params.get('e') || '1', 10) || 1;
   const shouldResume = params.get('resume') === '1';
 
   window._currentShowId = showId;
@@ -3377,6 +3502,80 @@ function buildWatchlistCard(item) {
   return card;
 }
 
+async function loadContinueWatchingRow(containerId, sectionId) {
+  const container = document.getElementById(containerId);
+  const section = document.getElementById(sectionId);
+  if (!container || !section) return;
+
+  const pq = _profileQuery();
+  const url = pq ? `/api/movies/continue-watching?${pq}` : '/api/movies/continue-watching';
+
+  try {
+    const res = await fetch(url, { headers: _profileHeaders() });
+    if (!res.ok) throw new Error('continue-watching fetch failed');
+    const data = await res.json();
+    const items = data.items || [];
+
+    if (!items.length) {
+      section.style.display = 'none';
+      return;
+    }
+
+    section.style.display = 'block';
+    container.innerHTML = '';
+
+    const cards = items
+      .slice(0, 20)
+      .map(item => buildContinueCard(item))
+      .filter(card => card !== null);
+
+    if (cards.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+
+    cards.forEach(card => container.appendChild(card));
+  } catch (e) {
+    console.warn('Error loading continue watching:', e);
+    section.style.display = 'none';
+  }
+}
+
+function buildContinueWatchingCard(item) {
+  const poster = item.poster || FALLBACK_POSTER;
+  const title = item.title || 'Unknown Title';
+  const progress = Math.max(0, Math.min(100, (item.progress || 0) * 100));
+  const tmdbId = item.tmdbId || item.content_id;
+  const mediaType = item.mediaType || item.type || 'movie';
+  const timestamp = item.timestamp || 0;
+
+  let watchUrl = `/movies/watch.html?id=${tmdbId}&type=${mediaType}`;
+  if (mediaType === 'tv' && item.season && item.episode) {
+    watchUrl += `&season=${item.season}&episode=${item.episode}`;
+  }
+  if (timestamp > 0) {
+    watchUrl += `&start=${Math.floor(timestamp)}`;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'poster-item';
+  card.style.position = 'relative';
+  card.innerHTML = `
+    <a href="${watchUrl}" class="poster-link" style="display:block;width:100%;height:100%;position:relative;">
+      <img src="${poster}" alt="${title}" class="poster-image" loading="lazy" onerror="this.src='${FALLBACK_POSTER}'">
+      <div class="poster-overlay">
+        <div class="overlay-title">${title}</div>
+        <div class="overlay-subtitle">${mediaType === 'tv' && item.season ? `S${item.season}E${item.episode}` : 'RESUME'}</div>
+      </div>
+      <div class="progress-bar" style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.1);">
+        <div style="height:100%;width:${progress}%;background:#e50914;transition:width 0.3s;"></div>
+      </div>
+    </a>
+  `;
+
+  return card;
+}
+
 async function loadWatchlistRow(containerId, sectionId) {
   const container = document.getElementById(containerId);
   const section = document.getElementById(sectionId);
@@ -3565,6 +3764,88 @@ function buildCastSection(credits, containerId) {
       ${char}
     </div>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HOME PAGE (movies/home.html)
+// ═══════════════════════════════════════════════════════════
+
+async function initHomePage() {
+  await resolveActiveProfile();
+  showThemeLoader('LOADING TOXIBHFLIX', 'FETCHING STREAMING CATALOG');
+  initRowIntersectionObserver();
+  
+  // Scroll header behaviour
+  const header = document.getElementById('site-header');
+  if (header) {
+    window.addEventListener('scroll', () =>
+      header.classList.toggle('scrolled', window.scrollY > 60), { passive: true });
+  }
+
+  // Init genres
+  initGenres('movie');
+
+  try {
+    // Load continue watching first
+    await loadContinueWatchingRow('row-continue', 'row-continue-section');
+
+    // Load trending movies
+    showSkeletons('row-trending-movies');
+    try {
+      const trendingMovies = await tmdb('/trending/movie/week');
+      renderRow(trendingMovies.results, 'row-trending-movies');
+    } catch (e) {
+      const c = document.getElementById('row-trending-movies');
+      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+    }
+
+    // Load trending TV shows
+    showSkeletons('row-trending-tv');
+    try {
+      const trendingTV = await tmdb('/trending/tv/week');
+      renderRow(trendingTV.results, 'row-trending-tv');
+    } catch (e) {
+      const c = document.getElementById('row-trending-tv');
+      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+    }
+
+    // Load top rated movies
+    showSkeletons('row-toprated');
+    try {
+      const topRated = await tmdb('/movie/top_rated');
+      renderRow(topRated.results, 'row-toprated');
+    } catch (e) {
+      const c = document.getElementById('row-toprated');
+      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+    }
+
+    // Load popular
+    showSkeletons('row-popular');
+    try {
+      const popular = await tmdb('/movie/popular');
+      renderRow(popular.results, 'row-popular');
+    } catch (e) {
+      const c = document.getElementById('row-popular');
+      if (c) c.innerHTML = '<p style="color:var(--nf-muted);font-family:Share Tech Mono,monospace;font-size:0.7rem;">Server error. Try again later.</p>';
+    }
+
+    // Load hero banner with featured trending movie
+    try {
+      const trending = await tmdb('/trending/movie/week');
+      const featured = trending.results.find(m => m.backdrop_path) || trending.results[0];
+      if (featured) setHero(featured);
+    } catch (e) { }
+
+    // Load recommended
+    await loadRecommendationsRow('row-recommended', 'movie');
+  } finally {
+    hideThemeLoader();
+  }
+
+  // Setup search overlay
+  bindGlobalSearchOverlay();
+  initCinematicIdleMode();
+  initTVModeEnhancements();
 }
 
 // ═══════════════════════════════════════════════════════════
