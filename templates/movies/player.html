@@ -443,6 +443,10 @@
         url: (id, type, s, e) => type === 'movie' ? `https://screenscape.me/embed?tmdb=${id}&type=movie` : `https://screenscape.me/embed?tmdb=${id}&type=tv&s=${s}&e=${e}`
       },
       {
+        name: '4K',
+        url: (id, type, s, e) => type === 'movie' ? `https://mapple.uk/watch/movie/${id}` : `https://mapple.uk/watch/tv/${id}-${s}-${e}`
+      },
+      {
         name: 'VidFast Pro',
         url: (id, type, s, e) => type === 'movie' ? `https://vidfast.pro/movie/${id}` : `https://vidfast.pro/tv/${id}/${s}/${e}`
       },

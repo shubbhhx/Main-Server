@@ -1093,6 +1093,13 @@ const TV_VIDEO_SERVERS = [
     primary: true
   },
   {
+    name: '4K',
+    url: (showId, season, episode, startSeconds = 0) => {
+      const base = `https://mapple.uk/watch/tv/${showId}-${season}-${episode}`;
+      return startSeconds > 5 ? `${base}?progress=${Math.floor(startSeconds)}` : base;
+    }
+  },
+  {
     name: 'VidKing',
     url: (showId, season, episode, startSeconds = 0) => {
       let src = `https://www.vidking.net/embed/tv/${showId}/${season}/${episode}?color=00f5ff&autoPlay=true`;
@@ -2269,6 +2276,10 @@ const VIDEO_SERVERS = [
     name: 'VidFast Pro',
     url: (id) => `https://vidfast.pro/movie/${id}`,
     primary: true
+  },
+  {
+    name: '4K',
+    url: (id) => `https://mapple.uk/watch/movie/${id}`
   },
   {
     name: 'VidKing',
